@@ -71,12 +71,11 @@ function _b64ToWb(b64){
   return XLSX.read(bytes, { type:'array' });
 }
 
-// Cache-busted GET for the file
+// Cache-busted GET — URL timestamp prevents caching, no extra headers that trigger CORS preflight
 function _ghGet(){
   return fetch(
     `https://api.github.com/repos/${_cfg.repo}/contents/${FILE_PATH}?ref=${_cfg.branch}&_=${Date.now()}`,
-    { headers:{ Authorization:`token ${_cfg.token}`, Accept:'application/vnd.github.v3+json',
-                'Cache-Control':'no-cache' } }
+    { headers:{ Authorization:`token ${_cfg.token}`, Accept:'application/vnd.github.v3+json' } }
   );
 }
 
