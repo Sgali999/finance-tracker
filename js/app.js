@@ -5,7 +5,8 @@ const PAGE_TITLES={
   dashboard:'Dashboard', ppf:'PPF Accounts', fd:'Fixed Deposits',
   business:'Business Investments', outside:'Outside Given Amounts',
   stocks:'Stocks', mf:'Mutual Funds', lic:'LIC Policies',
-  expenses:'Monthly Expenses', salary:'Salary & Income'
+  expenses:'Monthly Expenses', salary:'Salary & Income',
+  loans:'Loans Taken', loanPayments:'Loan EMI Payments', wallet:'👛 Wallet & Cash Flow'
 };
 
 function nav(page){
@@ -18,7 +19,7 @@ function nav(page){
   if(nb) nb.classList.add('active');
   document.getElementById('topbar-title').textContent=PAGE_TITLES[page]||page;
   const addBtn=document.querySelector('.topbar-actions');
-  addBtn.style.display=page==='dashboard'?'none':'flex';
+  addBtn.style.display=(page==='dashboard'||page==='wallet')?'none':'flex';
   if(page!=='dashboard') renderSection(page);
   else renderDashboard();
 }
