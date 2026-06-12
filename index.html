@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NestFinance – Personal Finance Tracker</title>
+  <link rel="stylesheet" href="css/style.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ══ GITHUB CONFIG MODAL ══ -->
+<div id="modal-config" class="overlay">
+  <div class="modal sm">
+    <div class="modal-icon">🔗</div>
+    <h2>Connect GitHub Repository</h2>
+    <p class="muted">Your data is stored as <code>data/finance.xlsx</code> in your repo.</p>
+    <div class="field">
+      <label>Personal Access Token</label>
+      <input type="password" id="cfg-token" placeholder="ghp_xxxxxxxxxxxxxxxx"/>
+      <small><a href="https://github.com/settings/tokens/new" target="_blank">Generate token ↗</a> — needs <strong>repo</strong> scope</small>
+    </div>
+    <div class="field">
+      <label>Repository (owner/repo)</label>
+      <input type="text" id="cfg-repo" placeholder="Sgali999/finance-tracker"/>
+    </div>
+    <div class="field">
+      <label>Branch</label>
+      <input type="text" id="cfg-branch" value="main"/>
+    </div>
+    <button class="btn primary full" onclick="ghConnect()">Connect & Load Data</button>
+    <div id="cfg-err" class="err-box" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ══ ENTRY MODAL (shared) ══ -->
+<div id="modal-entry" class="overlay" style="display:none">
+  <div class="modal" id="entry-modal-inner">
+    <div class="modal-head">
+      <div>
+        <div class="modal-icon" id="em-icon">💰</div>
+        <h2 id="em-title">Add Entry</h2>
+      </div>
+      <button class="close-btn" onclick="closeEntryModal()">✕</button>
+    </div>
+    <div id="em-body"></div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="closeEntryModal()">Cancel</button>
+      <button class="btn primary" id="em-save" onclick="saveEntry()">Save</button>
+    </div>
+    <div id="em-err" class="err-box" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ══ BREAK / REINVEST MODAL ══ -->
+<div id="modal-break" class="overlay" style="display:none">
+  <div class="modal sm">
+    <div class="modal-head">
+      <div><div class="modal-icon">🔓</div><h2>Close / Break Investment</h2></div>
+      <button class="close-btn" onclick="closeBreakModal()">✕</button>
+    </div>
+    <div id="brk-info" class="info-box"></div>
+    <div class="field"><label>Date Closed</label><input type="date" id="brk-date"/></div>
+    <div class="field-row c2">
+      <div class="field">
+        <label>Principal Received (₹)</label>
+        <input type="number" id="brk-amount" placeholder="0" oninput="updateBrkTotal()"/>
+        <small>The original invested amount returned</small>
+      </div>
+      <div class="field">
+        <label>Interest / Profit Received (₹)</label>
+        <input type="number" id="brk-interest" placeholder="0" oninput="updateBrkTotal()"/>
+        <small id="brk-interest-hint" style="color:var(--gold)"></small>
+      </div>
+    </div>
+    <div class="field">
+      <label>Total Amount Going to Wallet (₹)</label>
+      <div id="brk-total-display" style="font-size:1.2rem;font-weight:700;color:var(--green);padding:8px 0">₹0</div>
+    </div>
+    <div class="field">
+      <label>Reinvested Into</label>
+      <select id="brk-reinvest">
+        <option value="">Goes to Wallet (cash in hand)</option>
+        <option value="PPF">PPF</option><option value="FD">Fixed Deposit</option>
+        <option value="Business">Business Investment</option>
+        <option value="Outside">Outside Given Amount</option>
+        <option value="Stocks">Stocks</option><option value="MF">Mutual Fund</option>
+        <option value="LIC">LIC</option>
+      </select>
+    </div>
+    <div class="field"><label>Reinvestment Note</label><input type="text" id="brk-note" placeholder="e.g. Reinvested in new FD at SBI"/></div>
+    <div class="field"><label>Remarks</label><input type="text" id="brk-remarks" placeholder="Optional notes"/></div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="closeBreakModal()">Cancel</button>
+      <button class="btn danger" onclick="confirmBreak()">Confirm Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONFIRM DELETE MODAL ══ -->
+<div id="modal-del" class="overlay" style="display:none">
+  <div class="modal sm">
+    <div class="modal-icon">🗑️</div>
+    <h2>Delete Entry?</h2>
+    <p class="muted" id="del-msg">This cannot be undone.</p>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="document.getElementById('modal-del').style.display='none'">Cancel</button>
+      <button class="btn danger" id="btn-confirm-del" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div id="app" style="display:none">
+
+  <aside class="sidebar">
+    <div class="brand">₹ NestFinance</div>
+    <nav>
+      <button class="nav-item active" data-page="dashboard" onclick="nav('dashboard')">
+        <span class="nav-icon">📊</span> Dashboard
+      </button>
+      <button class="nav-item" data-page="yearly" onclick="nav('yearly')">
+        <span class="nav-icon">📅</span> Yearly Report
+      </button>
+      <div class="nav-section">Investments</div>
+      <button class="nav-item" data-page="ppf" onclick="nav('ppf')">
+        <span class="nav-icon">🏦</span> PPF
+      </button>
+      <button class="nav-item" data-page="fd" onclick="nav('fd')">
+        <span class="nav-icon">🏧</span> Fixed Deposits
+      </button>
+      <button class="nav-item" data-page="business" onclick="nav('business')">
+        <span class="nav-icon">💼</span> Business
+      </button>
+      <button class="nav-item" data-page="outside" onclick="nav('outside')">
+        <span class="nav-icon">🤝</span> Outside Given
+      </button>
+      <button class="nav-item" data-page="stocks" onclick="nav('stocks')">
+        <span class="nav-icon">📈</span> Stocks
+      </button>
+      <button class="nav-item" data-page="mf" onclick="nav('mf')">
+        <span class="nav-icon">💹</span> Mutual Funds
+      </button>
+      <button class="nav-item" data-page="lic" onclick="nav('lic')">
+        <span class="nav-icon">🛡️</span> LIC
+      </button>
+      <div class="nav-section">Tracking</div>
+      <button class="nav-item" data-page="expenses" onclick="nav('expenses')">
+        <span class="nav-icon">🧾</span> Monthly Expenses
+      </button>
+      <button class="nav-item" data-page="salary" onclick="nav('salary')">
+        <span class="nav-icon">💰</span> Salary / Income
+      </button>
+      <button class="nav-item" data-page="loans" onclick="nav('loans')">
+        <span class="nav-icon">🏦</span> Loans Taken
+      </button>
+      <button class="nav-item" data-page="wallet" onclick="nav('wallet')">
+        <span class="nav-icon">👛</span> Wallet / Cash Flow
+      </button>
+      <div class="nav-section" style="margin-top:8px">Custom Sections</div>
+      <button class="nav-item nav-new-section" onclick="openSectionBuilder('investment')">
+        <span class="nav-icon">📈</span> + Investment Section
+      </button>
+      <button class="nav-item nav-new-section deduction" onclick="openSectionBuilder('deduction')">
+        <span class="nav-icon">💳</span> + Deduction Section
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="btn-sync" onclick="ghSync()" id="sync-btn">↑ Sync to GitHub</button>
+      <button class="btn-settings" onclick="showConfig()">⚙ Settings</button>
+    </div>
+  </aside>
+
+  <div class="main-area">
+    <div class="topbar">
+      <button class="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-actions" id="topbar-actions">
+        <button class="btn primary sm" onclick="openAddModal(currentPage)">+ Add</button>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="kpi-row" style="grid-template-columns:repeat(3,1fr)">
+        <div class="kpi green"><div class="kpi-l">Total Invested (Active)</div><div class="kpi-v" id="kpi-invested">₹0</div></div>
+        <div class="kpi blue"><div class="kpi-l">Total Income (All Time)</div><div class="kpi-v" id="kpi-income">₹0</div></div>
+        <div class="kpi gold"><div class="kpi-l">Interest Earned (Live)</div><div class="kpi-v" id="kpi-interest">₹0</div></div>
+      </div>
+      <div class="kpi-row" style="grid-template-columns:repeat(3,1fr);margin-top:0">
+        <div class="kpi red"><div class="kpi-l">Total Expenses (All Time)</div><div class="kpi-v" id="kpi-expense">₹0</div></div>
+        <div class="kpi green"><div class="kpi-l">👛 Wallet Balance</div><div class="kpi-v" id="kpi-wallet-dash">₹0</div></div>
+        <div class="kpi red"><div class="kpi-l">🏦 Loan Outstanding</div><div class="kpi-v" id="kpi-loan-dash">₹0</div></div>
+      </div>
+      <div class="dash-grid">
+        <div class="card span2">
+          <div class="card-head">Investment Breakdown</div>
+          <canvas id="ch-donut" height="260"></canvas>
+        </div>
+        <div class="card span2">
+          <div class="card-head">Interest Accumulation by Type</div>
+          <canvas id="ch-interest" height="260"></canvas>
+        </div>
+        <div class="card span4">
+          <div class="card-head">Monthly Expenses (Last 12 Months)</div>
+          <canvas id="ch-expense" height="130"></canvas>
+        </div>
+      </div>
+      <div class="dash-grid" style="margin-top:16px">
+        <div class="card span2">
+          <div class="card-head">Active Investments Summary</div>
+          <table class="tbl" id="tbl-summary"><thead><tr><th>Type</th><th>Count</th><th>Invested</th><th>Interest Earned</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="card span2">
+          <div class="card-head">Recent Activity</div>
+          <table class="tbl" id="tbl-recent"><thead><tr><th>Date</th><th>Section</th><th>Details</th><th>Amount</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PPF -->
+    <div class="page" id="page-ppf">
+      <div class="section-kpi-row" id="kpi-ppf"></div>
+      <div class="filter-bar">
+        <select id="fil-ppf-status" onchange="renderSection('ppf')"><option value="all">All Status</option><option value="Active">Active</option><option value="Closed">Closed</option></select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-ppf">
+          <thead><tr>
+            <th>Date</th><th>Bank</th><th>Amount (₹)</th><th>Status</th>
+            <th>Returned (₹)</th><th>From (Source)</th><th>Other Details</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- FD -->
+    <div class="page" id="page-fd">
+      <div class="section-kpi-row" id="kpi-fd"></div>
+      <div class="filter-bar">
+        <select id="fil-fd-status" onchange="renderSection('fd')"><option value="all">All Status</option><option value="Active">Active</option><option value="Broken">Broken</option><option value="Matured">Matured</option></select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-fd">
+          <thead><tr>
+            <th>Date</th><th>FD Number</th><th>Bank</th><th>Amount (₹)</th>
+            <th>Rate %</th><th>Live Interest / Actual Return</th><th>Status</th>
+            <th>Reinvested Into</th><th>From (Source)</th><th>Details</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- BUSINESS -->
+    <div class="page" id="page-business">
+      <div class="section-kpi-row" id="kpi-business"></div>
+      <div class="filter-bar">
+        <select id="fil-business-status" onchange="renderSection('business')"><option value="all">All Status</option><option value="Active">Active</option><option value="Closed">Closed</option></select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-business">
+          <thead><tr>
+            <th>Date</th><th>Business Name</th><th>Amount (₹)</th><th>Rate %/yr</th>
+            <th>Earned Interest</th><th>Status</th><th>From (Source)</th><th>Details</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- OUTSIDE GIVEN -->
+    <div class="page" id="page-outside">
+      <div class="section-kpi-row" id="kpi-outside"></div>
+      <div class="filter-bar">
+        <select id="fil-outside-status" onchange="renderSection('outside')"><option value="all">All Status</option><option value="Active">Active</option><option value="Returned">Returned</option></select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-outside">
+          <thead><tr>
+            <th>Date</th><th>Person Name</th><th>Given (₹)</th><th>Rate %/yr</th>
+            <th>Earned Interest</th><th>Status</th><th>From (Source)</th><th>Details</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STOCKS -->
+    <div class="page" id="page-stocks">
+      <div class="section-kpi-row" id="kpi-stocks"></div>
+      <div class="filter-bar">
+        <select id="fil-stocks-status" onchange="renderSection('stocks')"><option value="all">All Status</option><option value="Active">Active</option><option value="Sold">Sold</option></select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-stocks">
+          <thead><tr>
+            <th>Date</th><th>Stock Name</th><th>Amount (₹)</th><th>Status</th><th>Details</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MUTUAL FUNDS -->
+    <div class="page" id="page-mf">
+      <div class="section-kpi-row" id="kpi-mf"></div>
+      <div class="filter-bar">
+        <select id="fil-mf-status" onchange="renderSection('mf')"><option value="all">All Status</option><option value="Active">Active</option><option value="Redeemed">Redeemed</option></select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-mf">
+          <thead><tr>
+            <th>Date</th><th>Fund Name</th><th>Amount (₹)</th><th>Status</th><th>Details</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LIC -->
+    <div class="page" id="page-lic">
+      <div class="section-kpi-row" id="kpi-lic"></div>
+      <div class="filter-bar">
+        <select id="fil-lic-status" onchange="renderSection('lic')"><option value="all">All Status</option><option value="Active">Active</option><option value="Closed">Closed</option></select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-lic">
+          <thead><tr>
+            <th>Date</th><th>LIC Name / Policy No.</th><th>Amount (₹)</th><th>Status</th><th>Details</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- EXPENSES -->
+    <div class="page" id="page-expenses">
+      <div class="section-kpi-row" id="kpi-expenses"></div>
+      <div class="filter-bar">
+        <input type="month" id="fil-exp-month" onchange="renderSection('expenses')"/>
+        <select id="fil-exp-cat" onchange="renderSection('expenses')">
+          <option value="all">All Categories</option>
+        </select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-expenses">
+          <thead><tr>
+            <th>Date</th><th>Expense Name</th><th>Category</th><th>Amount (₹)</th><th>Notes</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SALARY / INCOME -->
+    <div class="page" id="page-salary">
+      <div class="section-kpi-row" id="kpi-salary"></div>
+      <div class="filter-bar">
+        <input type="month" id="fil-sal-month" onchange="renderSection('salary')"/>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-salary">
+          <thead><tr>
+            <th>Date</th><th>Month</th><th>Type</th><th>Amount (₹)</th><th>Source</th><th>Notes</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /main-area -->
+
+    <!-- LOANS TAKEN -->
+    <div class="page" id="page-loans">
+      <div class="section-kpi-row" id="kpi-loans"></div>
+      <div class="filter-bar">
+        <select id="fil-loans-status" onchange="renderSection('loans')"><option value="all">All Status</option><option value="Active">Active</option><option value="Closed">Closed</option></select>
+      </div>
+      <div class="card">
+        <table class="tbl" id="tbl-loans">
+          <thead><tr>
+            <th>Date</th><th>Loan Name</th><th>Lender</th><th>Principal (₹)</th>
+            <th>Rate %</th><th>EMI (₹)</th><th>Paid (₹)</th><th>Outstanding</th>
+            <th>Progress</th><th>Status</th><th>Notes</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- WALLET / CASH FLOW -->
+    <div class="page" id="page-wallet">
+      <div class="wallet-settings-bar" id="wallet-settings-bar">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Wallet Settings</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:.78rem;color:var(--muted)">Track From Date</label>
+            <input type="date" id="wallet-start-date" style="padding:5px 8px;font-size:.78rem;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:5px;outline:none" onchange="saveWalletSettingsUI()"/>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:.78rem;color:var(--muted)">Opening Balance (₹)</label>
+            <input type="number" id="wallet-opening-bal" placeholder="0" style="padding:5px 8px;font-size:.78rem;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:5px;outline:none;width:130px" onchange="saveWalletSettingsUI()"/>
+          </div>
+          <span style="font-size:.72rem;color:var(--muted)">Set these to track wallet from a specific date with a known opening amount</span>
+        </div>
+      </div>
+      <div class="section-kpi-row" id="kpi-wallet" style="flex-wrap:wrap;margin-top:12px"></div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head">Monthly IN / OUT / Running Balance</div>
+        <canvas id="ch-wallet" height="130"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-head">Month-wise Breakdown</div>
+        <table class="tbl" id="tbl-wallet">
+          <thead><tr><th>Month</th><th>Total IN</th><th>Total OUT</th><th>Net</th><th>Running Balance</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+        <!-- YEARLY REPORT -->
+    <div class="page" id="page-yearly">
+      <div class="year-tab-bar" id="year-tabs"></div>
+      <div id="year-kpi-row" class="kpi-row" style="grid-template-columns:repeat(3,1fr)"></div>
+      <div id="year-content"></div>
+    </div>
+
+</div><!-- /app -->
+
+<!-- Sidebar overlay (mobile) -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- Bottom nav (mobile) -->
+<div class="bottom-nav" id="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="bnav-item active" data-bpage="dashboard" onclick="nav('dashboard');closeSidebarMobile()"><span class="bi">📊</span><span>Home</span></button>
+    <button class="bnav-item" data-bpage="yearly" onclick="nav('yearly');closeSidebarMobile()"><span class="bi">📅</span><span>Yearly</span></button>
+    <button class="bnav-item" data-bpage="fd" onclick="nav('fd');closeSidebarMobile()"><span class="bi">🏧</span><span>FD</span></button>
+    <button class="bnav-item" data-bpage="outside" onclick="nav('outside');closeSidebarMobile()"><span class="bi">🤝</span><span>Given</span></button>
+    <button class="bnav-item" data-bpage="expenses" onclick="nav('expenses');closeSidebarMobile()"><span class="bi">🧾</span><span>Expenses</span></button>
+    <button class="bnav-item" data-bpage="salary" onclick="nav('salary');closeSidebarMobile()"><span class="bi">💰</span><span>Income</span></button>
+    <button class="bnav-item" data-bpage="wallet" onclick="nav('wallet');closeSidebarMobile()"><span class="bi">👛</span><span>Wallet</span></button>
+    <button class="bnav-item" onclick="ghSync()"><span class="bi">☁️</span><span>Sync</span></button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<div id="sync-lbl" class="sync-lbl" style="display:none"></div>
+
+<!-- ══ SECTION BUILDER MODAL ══ -->
+<div id="modal-section-builder" class="overlay" style="display:none">
+  <div class="modal" style="width:680px">
+    <div class="modal-head">
+      <div><div class="modal-icon">🏗️</div><h2>Section Builder</h2></div>
+      <button class="close-btn" onclick="closeSectionBuilder()">✕</button>
+    </div>
+    <div id="sb-type-label" style="text-align:center;font-weight:700;font-size:.85rem;margin-bottom:14px;color:var(--green)">📈 Investment Section</div>
+    <p class="muted" style="margin-bottom:18px;margin-top:-10px">Define columns for your new section. It gets its own page, table, and Excel sheet.</p>
+    <div class="field-row c2">
+      <div class="field">
+        <label>Section Name</label>
+        <input type="text" id="sb-name" placeholder="e.g. PF, Gold, Real Estate…"/>
+      </div>
+      <div class="field">
+        <label>Icon (emoji)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="sb-icon" value="📁" style="width:60px;text-align:center;font-size:1.2rem"/>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;flex:1">
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">📁</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">🏛️</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">🚗</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">🌾</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">🏠</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">💎</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">🎓</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">⚡</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">🩺</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">🏆</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">💡</span>
+            <span class="icon-pick" onclick="document.getElementById('sb-icon').value=this.textContent">🔑</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin:16px 0 10px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Columns</div>
+      <button class="btn ghost" style="font-size:.75rem;padding:5px 12px" onclick="addColumnToBuilder()">+ Add Column</button>
+    </div>
+    <div id="sb-columns" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;padding-right:4px"></div>
+    <div id="sb-err" class="err-box" style="display:none;margin-top:10px"></div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="closeSectionBuilder()">Cancel</button>
+      <button class="btn primary" id="sb-save-btn" onclick="saveSectionDef()">Create Section</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CUSTOM ENTRY MODAL ══ -->
+<div id="modal-custom-entry" class="overlay" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <div><div class="modal-icon">✏️</div><h2 id="cem-title">Add Entry</h2></div>
+      <button class="close-btn" onclick="closeCustomEntryModal()">✕</button>
+    </div>
+    <div id="cem-body"></div>
+    <div id="cem-err" class="err-box" style="display:none"></div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="closeCustomEntryModal()">Cancel</button>
+      <button class="btn primary" onclick="saveCustomEntry()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/store.js"></script>
+<script src="js/github.js"></script>
+<script src="js/forms.js"></script>
+<script src="js/sections.js"></script>
+<script src="js/render.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
