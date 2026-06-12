@@ -377,7 +377,7 @@ function renderWalletChart(mw){
 const RENDER_MAP={
   ppf:renderPPF,fd:renderFD,business:renderBusiness,outside:renderOutside,
   stocks:renderStocks,mf:renderMF,lic:renderLIC,expenses:renderExpenses,
-  salary:renderSalary,loans:renderLoans,loanPayments:renderLoanPayments,wallet:renderWallet
+  salary:renderSalary,loans:renderLoans,wallet:renderWallet
 };
 function renderSection(s){
   if(s && s.startsWith('custom-')){ renderCustomSection(s.replace('custom-','')); return; }
@@ -412,7 +412,9 @@ function renderDashboard(){
   }).join('');
   if(typeof customSectionsSummaryRows==='function'){
     customSectionsSummaryRows().forEach(r=>{
-      summaryHtml+=`<tr><td>${r.label}</td><td>${r.count}</td><td class="amt">${fmt(r.amount)}</td><td>—</td></tr>`;
+      const style = r.isDeduction ? 'style="color:var(--red)"' : '';
+      const prefix = r.isDeduction ? '-' : '';
+      summaryHtml+=`<tr ${style}><td>${r.label}${r.isDeduction?' ⬇️':''}</td><td>${r.count}</td><td class="amt" ${style}>${prefix}${fmt(r.amount)}</td><td>—</td></tr>`;
     });
   }
   // Loans row
