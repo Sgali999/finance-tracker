@@ -126,60 +126,81 @@ function thisMonthLoanPayments(){
   return db.loanPayments.filter(p=>p.month===m).reduce((s,p)=>s+p.amount,0);
 }
 
+// ── WALLET SETTINGS ── (start date + opening balance)
+function getWalletSettings(){
+  try { return JSON.parse(localStorage.getItem('nf_wallet_settings')||'{}'); }
+  catch(e){ return {}; }
+}
+function saveWalletSettings(s){ localStorage.setItem('nf_wallet_settings', JSON.stringify(s)); }
+
 // ── CASH FLOW WALLET BALANCE ──
-// IN:  Salary entries + FD/investment returns (closed with returnAmount) + loan received
-// OUT: Investments made + monthly expenses + loan EMI payments
 function calcWalletBalance(){
-  let inflow = 0, outflow = 0;
+  const settings = getWalletSettings();
+  const startDate = settings.startDate || '';   // e.g. '2026-01-01'
+  const openingBalance = parseFloat(settings.openingBalance) || 0;
 
-  // Salary & other income
-  db.salary.forEach(r => inflow += r.amount);
+  function afterStart(date){ return !startDate || !date || date >= startDate; }
 
-  // Investment returns when closed
-  db.fd.filter(r=>r.brokenAmount>0).forEach(r => inflow += r.brokenAmount);
+  let inflow = openingBalance, outflow = 0;
 
-  // Outflow: investments made
+  // Salary & income
+  db.salary.filter(r=>afterStart(r.date)).forEach(r=>inflow+=r.amount);
+  // FD returns when broken
+  db.fd.filter(r=>r.brokenAmount>0&&afterStart(r.brokenDate)).forEach(r=>inflow+=r.brokenAmount);
+  // Investments made (outflow)
   ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
-    db[k].forEach(r => outflow += r.amount);
+    db[k].filter(r=>afterStart(r.date)).forEach(r=>outflow+=r.amount);
   });
-
-  // Outflow: expenses
-  db.expenses.forEach(r => outflow += r.amount);
-
-  // Outflow: loan payments (EMI)
-  db.loanPayments.forEach(p => outflow += p.amount);
-
-  // Custom sections: amount columns treated as outflow (investments)
-  if(typeof customSectionsTotalInvested==='function'){
-    // already counts in totalInvested, add to outflow
-    if(typeof loadCustomDefs==='function'){
-      loadCustomDefs().forEach(def => {
-        const amtCols = def.columns.filter(c=>c.type==='number');
-        (db.custom[def.id]||[]).forEach(r=>{
-          amtCols.forEach(col=>{ outflow += parseFloat(r[col.key])||0; });
-        });
+  // Monthly expenses
+  db.expenses.filter(r=>afterStart(r.date)).forEach(r=>outflow+=r.amount);
+  // Loan EMI payments
+  db.loanPayments.filter(p=>afterStart(p.date)).forEach(p=>outflow+=p.amount);
+  // Custom investment sections (outflow)
+  if(typeof loadCustomDefs==='function'){
+    loadCustomDefs().filter(d=>d.sectionType!=='deduction').forEach(def=>{
+      const amtCols=def.columns.filter(c=>c.type==='number');
+      (db.custom[def.id]||[]).filter(r=>afterStart(r.date)).forEach(r=>{
+        amtCols.forEach(col=>{ outflow+=parseFloat(r[col.key])||0; });
       });
-    }
+    });
+    // Custom deduction sections (outflow)
+    loadCustomDefs().filter(d=>d.sectionType==='deduction').forEach(def=>{
+      const amtCols=def.columns.filter(c=>c.type==='number');
+      (db.custom[def.id]||[]).filter(r=>afterStart(r.date)).forEach(r=>{
+        amtCols.forEach(col=>{ outflow+=parseFloat(r[col.key])||0; });
+      });
+    });
   }
-
-  return { inflow, outflow, balance: inflow - outflow };
+  return { inflow, outflow, balance: inflow - outflow, startDate, openingBalance };
 }
 
 // month-wise wallet for chart
 function monthlyWallet(){
+  const settings = getWalletSettings();
+  const startDate = settings.startDate || '';
+  function afterStart(date){ return !startDate || !date || date >= startDate; }
   const map = {};
   function add(month, flow, amt){
     if(!month) return;
     if(!map[month]) map[month]={in:0,out:0};
     map[month][flow] += amt;
   }
-  db.salary.forEach(r=>add(r.month||r.date.slice(0,7),'in',r.amount));
-  db.fd.filter(r=>r.brokenAmount>0).forEach(r=>add(r.brokenDate?.slice(0,7)||'','in',r.brokenAmount));
+  db.salary.filter(r=>afterStart(r.date)).forEach(r=>add(r.month||r.date.slice(0,7),'in',r.amount));
+  db.fd.filter(r=>r.brokenAmount>0&&afterStart(r.brokenDate)).forEach(r=>add(r.brokenDate?.slice(0,7)||'','in',r.brokenAmount));
   ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
-    db[k].forEach(r=>add(r.date.slice(0,7),'out',r.amount));
+    db[k].filter(r=>afterStart(r.date)).forEach(r=>add(r.date.slice(0,7),'out',r.amount));
   });
-  db.expenses.forEach(r=>add(r.date.slice(0,7),'out',r.amount));
-  db.loanPayments.forEach(p=>add(p.month||p.date.slice(0,7),'out',p.amount));
+  db.expenses.filter(r=>afterStart(r.date)).forEach(r=>add(r.date.slice(0,7),'out',r.amount));
+  db.loanPayments.filter(p=>afterStart(p.date)).forEach(p=>add(p.month||p.date.slice(0,7),'out',p.amount));
+  if(typeof loadCustomDefs==='function'){
+    loadCustomDefs().forEach(def=>{
+      const amtCols=def.columns.filter(c=>c.type==='number');
+      const dateCol=def.columns.find(c=>c.type==='date');
+      (db.custom[def.id]||[]).filter(r=>afterStart(dateCol?r[dateCol.key]:'')).forEach(r=>{
+        amtCols.forEach(col=>add(dateCol?r[dateCol.key]?.slice(0,7):'','out',parseFloat(r[col.key])||0));
+      });
+    });
+  }
   return map;
 }
 
