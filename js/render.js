@@ -28,9 +28,10 @@ function renderPPF(){
   tbody.innerHTML=rows.length?rows.map(r=>`<tr>
     <td>${fmtD(r.date)}</td><td>${r.bank||'—'}</td>
     <td class="amt">${fmt(r.amount)}</td><td>${statusBadge(r.status)}</td>
-    <td>${r.source||'—'}</td><td title="${r.details||''}">${(r.details||'—').slice(0,40)}${r.details?.length>40?'…':''}</td>
+    <td>${r.status!=='Active'?`<span class="amt-g">+${fmt((r.returnAmount||0)+(r.returnInterest||0))}</span>`:'—'}</td>
+    <td>${r.source||'—'}</td><td title="${r.details||''}">${(r.details||'—').slice(0,35)}${(r.details||'').length>35?'…':''}</td>
     <td>${actBtns('ppf',r.id,r.status)}</td>
-  </tr>`).join(''):empty(7);
+  </tr>`).join(''):empty(8);
 }
 
 // ── FD ──
@@ -45,16 +46,19 @@ function renderFD(){
     skpi('Active FDs',active.length,'b')+skpi('Total Invested',fmt(totalInv),'g')+skpi('Interest Earned (Live)',fmt(totalInt),'gold');
   const tbody=document.querySelector('#tbl-fd tbody');
   tbody.innerHTML=rows.length?rows.map(r=>{
-    const interest=calcInterest(r.amount,r.rate,r.date);
-    const reinvest=r.reinvestedInto?`<span class="reinvest-tag">→ ${r.reinvestedInto}</span> ${r.reinvestNote||''}`:r.status!=='Active'?'Withdrawn':'—';
+    const liveInterest=calcInterest(r.amount,r.rate,r.date);
+    const reinvest=r.reinvestedInto?`<span class="reinvest-tag">→ ${r.reinvestedInto}</span> ${r.reinvestNote||''}`:r.status!=='Active'?'To Wallet':'—';
+    const returnCol = r.status!=='Active'
+      ? `<span class="amt-g">+${fmt((r.returnAmount||0)+(r.returnInterest||0))}</span><br><small style="color:var(--muted)">P:${fmt(r.returnAmount||0)} I:${fmt(r.returnInterest||0)}</small>`
+      : `<span class="interest-live">${fmt(liveInterest)}</span>`;
     return `<tr>
       <td>${fmtD(r.date)}</td><td>${r.fdNumber||'—'}</td><td>${r.bank||'—'}</td>
       <td class="amt">${fmt(r.amount)}</td><td>${fmtRate(r.rate)}</td>
-      <td class="interest-live">${r.status==='Active'?fmt(interest):'—'}</td>
+      <td>${returnCol}</td>
       <td>${statusBadge(r.status)}</td>
       <td style="font-size:.72rem">${reinvest}</td>
       <td>${r.source||'—'}</td>
-      <td title="${r.details||''}">${(r.details||'—').slice(0,30)}${r.details?.length>30?'…':''}</td>
+      <td title="${r.details||''}">${(r.details||'—').slice(0,25)}${(r.details||'').length>25?'…':''}</td>
       <td>${actBtns('fd',r.id,r.status)}</td>
     </tr>`;
   }).join(''):empty(11);
@@ -69,16 +73,19 @@ function renderBusiness(){
   const totalInv=active.reduce((s,r)=>s+r.amount,0);
   const totalInt=active.reduce((s,r)=>s+calcInterest(r.amount,r.rate,r.date),0);
   document.getElementById('kpi-business').innerHTML=
-    skpi('Active',active.length,'b')+skpi('Total Invested',fmt(totalInv),'g')+skpi('Returns Earned',fmt(totalInt),'gold');
+    skpi('Active',active.length,'b')+skpi('Total Invested',fmt(totalInv),'g')+skpi('Returns Earned (Live)',fmt(totalInt),'gold');
   const tbody=document.querySelector('#tbl-business tbody');
   tbody.innerHTML=rows.length?rows.map(r=>{
-    const interest=calcInterest(r.amount,r.rate,r.date);
+    const liveInterest=calcInterest(r.amount,r.rate,r.date);
+    const returnCol = r.status!=='Active'
+      ? `<span class="amt-g">+${fmt((r.returnAmount||0)+(r.returnInterest||0))}</span><br><small style="color:var(--muted)">P:${fmt(r.returnAmount||0)} I:${fmt(r.returnInterest||0)}</small>`
+      : `<span class="interest-live">${fmt(liveInterest)}</span>`;
     return `<tr>
       <td>${fmtD(r.date)}</td><td>${r.name||'—'}</td>
       <td class="amt">${fmt(r.amount)}</td><td>${fmtRate(r.rate)}</td>
-      <td class="interest-live">${r.status==='Active'?fmt(interest):'—'}</td>
+      <td>${returnCol}</td>
       <td>${statusBadge(r.status)}</td><td>${r.source||'—'}</td>
-      <td title="${r.details||''}">${(r.details||'—').slice(0,30)}${r.details?.length>30?'…':''}</td>
+      <td title="${r.details||''}">${(r.details||'—').slice(0,25)}${(r.details||'').length>25?'…':''}</td>
       <td>${actBtns('business',r.id,r.status)}</td>
     </tr>`;
   }).join(''):empty(9);
@@ -93,16 +100,19 @@ function renderOutside(){
   const totalGiven=active.reduce((s,r)=>s+r.amount,0);
   const totalInt=active.reduce((s,r)=>s+calcInterest(r.amount,r.rate,r.date),0);
   document.getElementById('kpi-outside').innerHTML=
-    skpi('Active Loans',active.length,'b')+skpi('Total Given',fmt(totalGiven),'g')+skpi('Interest Earned',fmt(totalInt),'gold');
+    skpi('Active',active.length,'b')+skpi('Total Given',fmt(totalGiven),'g')+skpi('Interest Earned (Live)',fmt(totalInt),'gold');
   const tbody=document.querySelector('#tbl-outside tbody');
   tbody.innerHTML=rows.length?rows.map(r=>{
-    const interest=calcInterest(r.amount,r.rate,r.date);
+    const liveInterest=calcInterest(r.amount,r.rate,r.date);
+    const returnCol = r.status!=='Active'
+      ? `<span class="amt-g">+${fmt((r.returnAmount||0)+(r.returnInterest||0))}</span><br><small style="color:var(--muted)">P:${fmt(r.returnAmount||0)} I:${fmt(r.returnInterest||0)}</small>`
+      : `<span class="interest-live">${fmt(liveInterest)}</span>`;
     return `<tr>
       <td>${fmtD(r.date)}</td><td>${r.person||'—'}</td>
       <td class="amt">${fmt(r.amount)}</td><td>${fmtRate(r.rate)}</td>
-      <td class="interest-live">${r.status==='Active'?fmt(interest):'—'}</td>
+      <td>${returnCol}</td>
       <td>${statusBadge(r.status)}</td><td>${r.source||'—'}</td>
-      <td title="${r.details||''}">${(r.details||'—').slice(0,30)}${r.details?.length>30?'…':''}</td>
+      <td title="${r.details||''}">${(r.details||'—').slice(0,25)}${(r.details||'').length>25?'…':''}</td>
       <td>${actBtns('outside',r.id,r.status)}</td>
     </tr>`;
   }).join(''):empty(9);
