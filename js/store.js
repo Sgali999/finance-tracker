@@ -1,9 +1,11 @@
 // ── STORE ── data model + Excel I/O + interest calc
 const SHEETS = { PPF:'PPF', FD:'FD', BUSINESS:'Business', OUTSIDE:'Outside',
-  STOCKS:'Stocks', MF:'MutualFunds', LIC:'LIC', EXPENSES:'Expenses', SALARY:'Salary' };
+  STOCKS:'Stocks', MF:'MutualFunds', LIC:'LIC', EXPENSES:'Expenses', SALARY:'Salary',
+  LOANS:'Loans', LOAN_PMTS:'LoanPayments', CASHFLOW:'CashFlow' };
 
 const db = {
-  ppf:[], fd:[], business:[], outside:[], stocks:[], mf:[], lic:[], expenses:[], salary:[],
+  ppf:[], fd:[], business:[], outside:[], stocks:[], mf:[], lic:[],
+  expenses:[], salary:[], loans:[], loanPayments:[], cashflow:[],
   custom: {}
 };
 let _dirty = false;
@@ -11,8 +13,7 @@ let _dirty = false;
 // ── ID ──
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
 
-// ── INTEREST CALCULATION ──
-// Simple interest: P * R * T / 100  where T in years from startDate to today
+// ── INTEREST CALCULATION ── Simple interest P*R*T/100
 function calcInterest(amount, ratePerYear, startDate){
   if(!amount || !ratePerYear || !startDate) return 0;
   const start = new Date(startDate);
@@ -64,7 +65,19 @@ function wbToDb(wb){
     id:r.id||uid(), date:r.date||'', month:r.month||'', type:r.type||'Salary',
     amount:+r.amount||0, source:r.source||'', notes:r.notes||''
   }));
-  // custom sections loaded separately after sections.js is ready
+  db.loans = rows(SHEETS.LOANS).map(r=>({
+    id:r.id||uid(), date:r.date||'', name:r.name||'', lender:r.lender||'',
+    principal:+r.principal||0, rate:+r.rate||0, emiAmount:+r.emiAmount||0,
+    tenure:+r.tenure||0, status:r.status||'Active', notes:r.notes||''
+  }));
+  db.loanPayments = rows(SHEETS.LOAN_PMTS).map(r=>({
+    id:r.id||uid(), loanId:r.loanId||'', date:r.date||'', month:r.month||'',
+    amount:+r.amount||0, notes:r.notes||''
+  }));
+  db.cashflow = rows(SHEETS.CASHFLOW).map(r=>({
+    id:r.id||uid(), date:r.date||'', month:r.month||'', type:r.type||'',
+    flow:r.flow||'in', amount:+r.amount||0, description:r.description||'', linkedId:r.linkedId||''
+  }));
   _dirty = false;
 }
 
@@ -75,15 +88,18 @@ function dbToWb(){
     if(!data.length){ XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[]]), name); return; }
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), name);
   }
-  addSheet(db.ppf,      SHEETS.PPF);
-  addSheet(db.fd,       SHEETS.FD);
-  addSheet(db.business, SHEETS.BUSINESS);
-  addSheet(db.outside,  SHEETS.OUTSIDE);
-  addSheet(db.stocks,   SHEETS.STOCKS);
-  addSheet(db.mf,       SHEETS.MF);
-  addSheet(db.lic,      SHEETS.LIC);
-  addSheet(db.expenses, SHEETS.EXPENSES);
-  addSheet(db.salary,   SHEETS.SALARY);
+  addSheet(db.ppf,          SHEETS.PPF);
+  addSheet(db.fd,           SHEETS.FD);
+  addSheet(db.business,     SHEETS.BUSINESS);
+  addSheet(db.outside,      SHEETS.OUTSIDE);
+  addSheet(db.stocks,       SHEETS.STOCKS);
+  addSheet(db.mf,           SHEETS.MF);
+  addSheet(db.lic,          SHEETS.LIC);
+  addSheet(db.expenses,     SHEETS.EXPENSES);
+  addSheet(db.salary,       SHEETS.SALARY);
+  addSheet(db.loans,        SHEETS.LOANS);
+  addSheet(db.loanPayments, SHEETS.LOAN_PMTS);
+  addSheet(db.cashflow,     SHEETS.CASHFLOW);
   if(typeof writeCustomSheetsToWb === 'function') writeCustomSheetsToWb(wb);
   return wb;
 }
@@ -96,6 +112,76 @@ function dbUpdate(section, id, updates){
 }
 function dbDelete(section, id){ db[section]=db[section].filter(r=>r.id!==id); _dirty=true; }
 function dbGet(section, id){ return db[section].find(r=>r.id===id); }
+
+// ── LOAN HELPERS ──
+function loanOutstanding(loan){
+  const paid = db.loanPayments.filter(p=>p.loanId===loan.id).reduce((s,p)=>s+p.amount,0);
+  return Math.max(0, loan.principal - paid);
+}
+function totalLoanOutstanding(){
+  return db.loans.filter(l=>l.status==='Active').reduce((s,l)=>s+loanOutstanding(l),0);
+}
+function thisMonthLoanPayments(){
+  const m = new Date().toISOString().slice(0,7);
+  return db.loanPayments.filter(p=>p.month===m).reduce((s,p)=>s+p.amount,0);
+}
+
+// ── CASH FLOW WALLET BALANCE ──
+// IN:  Salary entries + FD/investment returns (closed with returnAmount) + loan received
+// OUT: Investments made + monthly expenses + loan EMI payments
+function calcWalletBalance(){
+  let inflow = 0, outflow = 0;
+
+  // Salary & other income
+  db.salary.forEach(r => inflow += r.amount);
+
+  // Investment returns when closed
+  db.fd.filter(r=>r.brokenAmount>0).forEach(r => inflow += r.brokenAmount);
+
+  // Outflow: investments made
+  ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
+    db[k].forEach(r => outflow += r.amount);
+  });
+
+  // Outflow: expenses
+  db.expenses.forEach(r => outflow += r.amount);
+
+  // Outflow: loan payments (EMI)
+  db.loanPayments.forEach(p => outflow += p.amount);
+
+  // Custom sections: amount columns treated as outflow (investments)
+  if(typeof customSectionsTotalInvested==='function'){
+    // already counts in totalInvested, add to outflow
+    if(typeof loadCustomDefs==='function'){
+      loadCustomDefs().forEach(def => {
+        const amtCols = def.columns.filter(c=>c.type==='number');
+        (db.custom[def.id]||[]).forEach(r=>{
+          amtCols.forEach(col=>{ outflow += parseFloat(r[col.key])||0; });
+        });
+      });
+    }
+  }
+
+  return { inflow, outflow, balance: inflow - outflow };
+}
+
+// month-wise wallet for chart
+function monthlyWallet(){
+  const map = {};
+  function add(month, flow, amt){
+    if(!month) return;
+    if(!map[month]) map[month]={in:0,out:0};
+    map[month][flow] += amt;
+  }
+  db.salary.forEach(r=>add(r.month||r.date.slice(0,7),'in',r.amount));
+  db.fd.filter(r=>r.brokenAmount>0).forEach(r=>add(r.brokenDate?.slice(0,7)||'','in',r.brokenAmount));
+  ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
+    db[k].forEach(r=>add(r.date.slice(0,7),'out',r.amount));
+  });
+  db.expenses.forEach(r=>add(r.date.slice(0,7),'out',r.amount));
+  db.loanPayments.forEach(p=>add(p.month||p.date.slice(0,7),'out',p.amount));
+  return map;
+}
 
 // ── AGGREGATES ──
 function totalInvested(){
