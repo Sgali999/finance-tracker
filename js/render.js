@@ -216,8 +216,169 @@ function renderSalary(){
   </tr>`).join(''):empty(7);
 }
 
+
+// ── LOANS ──
+function renderLoans(){
+  const fil=document.getElementById('fil-loans-status')?.value||'all';
+  let rows=db.loans; if(fil!=='all') rows=rows.filter(r=>r.status===fil);
+  rows=[...rows].sort((a,b)=>b.date.localeCompare(a.date));
+  const active=db.loans.filter(r=>r.status==='Active');
+  const totalPrincipal=active.reduce((s,r)=>s+r.principal,0);
+  const totalOutstanding=active.reduce((s,r)=>s+loanOutstanding(r),0);
+  const totalPaid=db.loanPayments.reduce((s,p)=>s+p.amount,0);
+  document.getElementById('kpi-loans').innerHTML=
+    skpi('Active Loans',active.length,'r')+
+    skpi('Total Borrowed',fmt(totalPrincipal),'r')+
+    skpi('Outstanding',fmt(totalOutstanding),'r')+
+    skpi('Total Paid Back',fmt(totalPaid),'g');
+  const tbody=document.querySelector('#tbl-loans tbody');
+  tbody.innerHTML=rows.length?rows.map(r=>{
+    const paid=db.loanPayments.filter(p=>p.loanId===r.id).reduce((s,p)=>s+p.amount,0);
+    const outstanding=Math.max(0,r.principal-paid);
+    const pct=r.principal>0?Math.round(paid/r.principal*100):0;
+    return `<tr>
+      <td>${fmtD(r.date)}</td><td>${r.name||'—'}</td><td>${r.lender||'—'}</td>
+      <td class="amt amt-r">${fmt(r.principal)}</td>
+      <td>${fmtRate(r.rate)}</td><td>${fmt(r.emiAmount)}</td>
+      <td class="amt amt-g">${fmt(paid)}</td>
+      <td class="amt ${outstanding>0?'amt-r':''}">${fmt(outstanding)}</td>
+      <td>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <span style="font-size:.65rem;color:var(--muted)">${pct}% paid</span>
+      </td>
+      <td>${statusBadge(r.status)}</td>
+      <td title="${r.notes||''}">${(r.notes||'—').slice(0,25)}${r.notes?.length>25?'…':''}</td>
+      <td>${actBtns('loans',r.id,r.status)}</td>
+    </tr>`;
+  }).join(''):empty(12);
+}
+
+// ── LOAN PAYMENTS ──
+function renderLoanPayments(){
+  const filLoan=document.getElementById('fil-lp-loan')?.value||'all';
+  const filMonth=document.getElementById('fil-lp-month')?.value||'';
+  let rows=db.loanPayments;
+  if(filLoan!=='all') rows=rows.filter(p=>p.loanId===filLoan);
+  if(filMonth) rows=rows.filter(p=>p.month===filMonth||p.date.startsWith(filMonth));
+  rows=[...rows].sort((a,b)=>b.date.localeCompare(a.date));
+  // populate loan filter
+  const loanSel=document.getElementById('fil-lp-loan');
+  if(loanSel){
+    const cur=loanSel.value;
+    loanSel.innerHTML='<option value="all">All Loans</option>'+db.loans.map(l=>`<option value="${l.id}">${l.name}</option>`).join('');
+    if(cur) loanSel.value=cur;
+  }
+  const total=rows.reduce((s,p)=>s+p.amount,0);
+  document.getElementById('kpi-loanpayments').innerHTML=
+    skpi('Payments',rows.length,'b')+skpi('Total Paid (filtered)',fmt(total),'g');
+  const tbody=document.querySelector('#tbl-loanpayments tbody');
+  tbody.innerHTML=rows.length?rows.map(p=>{
+    const loan=db.loans.find(l=>l.id===p.loanId);
+    return `<tr>
+      <td>${fmtD(p.date)}</td><td>${p.month||'—'}</td>
+      <td>${loan?loan.name:'—'}</td>
+      <td class="amt amt-g">${fmt(p.amount)}</td>
+      <td>${p.notes||'—'}</td>
+      <td><div class="act-btns">
+        <button class="act act-edit" onclick="openEditModal('loanPayments','${p.id}')">Edit</button>
+        <button class="act act-del" onclick="openDeleteModal('loanPayments','${p.id}')">Del</button>
+      </div></td>
+    </tr>`;
+  }).join(''):empty(6);
+}
+
+// ── WALLET / CASH FLOW ──
+function renderWallet(){
+  const {inflow,outflow,balance} = calcWalletBalance();
+
+  // Salary this year
+  const thisY=new Date().getFullYear()+'';
+  const salaryY=db.salary.filter(r=>r.date.startsWith(thisY)).reduce((s,r)=>s+r.amount,0);
+  // Investments this year
+  const invY=['ppf','fd','business','outside','stocks','mf','lic'].reduce((s,k)=>
+    s+db[k].filter(r=>r.date.startsWith(thisY)).reduce((a,r)=>a+r.amount,0),0);
+  // Returns received (FD breaks)
+  const returns=db.fd.filter(r=>r.brokenAmount>0).reduce((s,r)=>s+r.brokenAmount,0);
+  // Loan EMIs this year
+  const loanEmiY=db.loanPayments.filter(p=>p.date.startsWith(thisY)).reduce((s,p)=>s+p.amount,0);
+  // Expenses this year
+  const expY=db.expenses.filter(r=>r.date.startsWith(thisY)).reduce((s,r)=>s+r.amount,0);
+
+  document.getElementById('kpi-wallet').innerHTML=
+    skpi('Total Salary Received',fmt(inflow),'g')+
+    skpi('Investment Returns',fmt(returns),'g')+
+    skpi('Total Invested (Out)',fmt(outflow - expY - loanEmiY),'b')+
+    skpi('Total Expenses',fmt(expY),'r')+
+    skpi('Loan EMIs Paid',fmt(loanEmiY),'r')+
+    skpi('💰 Wallet Balance',fmt(balance),balance>=0?'g':'r');
+
+  // Month-wise breakdown table
+  const mw = monthlyWallet();
+  const months = Object.keys(mw).sort().reverse().slice(0,24);
+  let running = inflow - outflow; // start from total
+  const tbody = document.querySelector('#tbl-wallet tbody');
+  if(!tbody) return;
+
+  // Build running balance month by month (ascending)
+  const ascMonths = Object.keys(mw).sort();
+  let bal = 0;
+  const balMap = {};
+  ascMonths.forEach(m=>{ bal += mw[m].in - mw[m].out; balMap[m]=bal; });
+
+  tbody.innerHTML = months.map(m=>{
+    const net = mw[m].in - mw[m].out;
+    const b = balMap[m];
+    return `<tr>
+      <td>${m}</td>
+      <td class="amt amt-g">+${fmt(mw[m].in)}</td>
+      <td class="amt amt-r">-${fmt(mw[m].out)}</td>
+      <td class="amt ${net>=0?'amt-g':'amt-r'}">${net>=0?'+':''}${fmt(net)}</td>
+      <td class="amt ${b>=0?'amt-g':'amt-r'}">${fmt(b)}</td>
+    </tr>`;
+  }).join('')||'<tr class="empty-row"><td colspan="5">No cash flow data yet. Add salary and expenses to track.</td></tr>';
+
+  renderWalletChart(mw);
+}
+
+function renderWalletChart(mw){
+  if(typeof _ch==='undefined') return;
+  const months=Object.keys(mw).sort().slice(-12);
+  const labels=months.map(m=>{ const d=new Date(m+'-01'); return d.toLocaleString('en-IN',{month:'short',year:'2-digit'}); });
+  const inD=months.map(m=>mw[m].in);
+  const outD=months.map(m=>mw[m].out);
+  // running balance
+  let bal=0; const balD=months.map(m=>{ bal+=mw[m].in-mw[m].out; return bal; });
+  if(typeof dc==='function') dc('ch-wallet');
+  const ctx=document.getElementById('ch-wallet')?.getContext('2d');
+  if(!ctx) return;
+  const PALETTE_=['#22c55e','#ef4444','#6366f1'];
+  _ch['ch-wallet']=new Chart(ctx,{
+    data:{
+      labels,
+      datasets:[
+        {type:'bar',label:'IN',data:inD,backgroundColor:'rgba(34,197,94,.7)',borderRadius:4,yAxisID:'y'},
+        {type:'bar',label:'OUT',data:outD,backgroundColor:'rgba(239,68,68,.6)',borderRadius:4,yAxisID:'y'},
+        {type:'line',label:'Running Balance',data:balD,borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,.1)',
+         pointBackgroundColor:'#6366f1',fill:true,tension:.3,yAxisID:'y'}
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{labels:{color:'#7b8baa',font:{size:11}}}},
+      scales:{
+        x:{ticks:{color:'#7b8baa',font:{size:10}},grid:{color:'#2a3349'}},
+        y:{ticks:{color:'#7b8baa',callback:v=>'₹'+v.toLocaleString('en-IN')},grid:{color:'#2a3349'}}
+      }
+    }
+  });
+}
+
 // ── MASTER RENDER ──
-const RENDER_MAP={ppf:renderPPF,fd:renderFD,business:renderBusiness,outside:renderOutside,stocks:renderStocks,mf:renderMF,lic:renderLIC,expenses:renderExpenses,salary:renderSalary};
+const RENDER_MAP={
+  ppf:renderPPF,fd:renderFD,business:renderBusiness,outside:renderOutside,
+  stocks:renderStocks,mf:renderMF,lic:renderLIC,expenses:renderExpenses,
+  salary:renderSalary,loans:renderLoans,loanPayments:renderLoanPayments,wallet:renderWallet
+};
 function renderSection(s){
   if(s && s.startsWith('custom-')){ renderCustomSection(s.replace('custom-','')); return; }
   const fn=RENDER_MAP[s]; if(fn) fn();
@@ -225,11 +386,15 @@ function renderSection(s){
 
 // ── DASHBOARD ──
 function renderDashboard(){
+  const wallet=calcWalletBalance();
   document.getElementById('kpi-invested').textContent=fmt(totalInvested());
   document.getElementById('kpi-income').textContent=fmt(thisYearIncome());
   document.getElementById('kpi-interest').textContent=fmt(totalInterestEarned());
   document.getElementById('kpi-expense').textContent=fmt(thisYearExpenses());
-  // Summary table — built-in sections
+  document.getElementById('kpi-wallet-dash').textContent=fmt(wallet.balance);
+  document.getElementById('kpi-loan-dash').textContent=fmt(totalLoanOutstanding());
+
+  // Summary table
   const rows=[
     {label:'PPF',key:'ppf',hasInt:false},{label:'Fixed Deposits',key:'fd',hasInt:true},
     {label:'Business',key:'business',hasInt:true},{label:'Outside Given',key:'outside',hasInt:true},
@@ -245,44 +410,44 @@ function renderDashboard(){
       <td class="interest-live">${interest!==null?fmt(interest):'—'}</td>
     </tr>`;
   }).join('');
-  // Custom sections in summary
-  if(typeof customSectionsSummaryRows === 'function'){
-    customSectionsSummaryRows().forEach(r => {
-      summaryHtml += `<tr>
-        <td>${r.label}</td><td>${r.count}</td>
-        <td class="amt">${fmt(r.amount)}</td><td>—</td>
-      </tr>`;
+  if(typeof customSectionsSummaryRows==='function'){
+    customSectionsSummaryRows().forEach(r=>{
+      summaryHtml+=`<tr><td>${r.label}</td><td>${r.count}</td><td class="amt">${fmt(r.amount)}</td><td>—</td></tr>`;
     });
   }
-  document.querySelector('#tbl-summary tbody').innerHTML = summaryHtml;
-  // Recent — built-in + custom
+  // Loans row
+  const activeLoanAmt=db.loans.filter(l=>l.status==='Active').reduce((s,l)=>s+loanOutstanding(l),0);
+  if(activeLoanAmt>0){
+    summaryHtml+=`<tr style="color:var(--red)"><td>🏦 Loans (Outstanding)</td><td>${db.loans.filter(l=>l.status==='Active').length}</td><td class="amt" style="color:var(--red)">-${fmt(activeLoanAmt)}</td><td>—</td></tr>`;
+  }
+  document.querySelector('#tbl-summary tbody').innerHTML=summaryHtml;
+
+  // Recent activity
   const allRecent=[];
   [{k:'ppf',l:'PPF'},{k:'fd',l:'FD'},{k:'business',l:'Business'},{k:'outside',l:'Outside Given'},
    {k:'stocks',l:'Stocks'},{k:'mf',l:'Mutual Fund'},{k:'lic',l:'LIC'},
    {k:'expenses',l:'Expense'},{k:'salary',l:'Income'}].forEach(({k,l})=>{
     db[k].forEach(r=>allRecent.push({date:r.date,section:l,name:r.name||r.bank||r.person||r.fdNumber||r.type||'',amount:r.amount,flow:k==='salary'?'in':k==='expenses'?'out':'invest'}));
   });
-  // Add custom section recent entries
-  if(typeof loadCustomDefs === 'function'){
-    loadCustomDefs().forEach(def => {
-      const amtCol = def.columns.find(c=>c.type==='number');
-      const nameCol = def.columns.find(c=>c.type==='text');
-      const dateCol = def.columns.find(c=>c.type==='date');
-      (db.custom[def.id]||[]).forEach(r => {
-        allRecent.push({
-          date: dateCol ? r[dateCol.key] : '',
-          section: def.name,
-          name: nameCol ? r[nameCol.key] : '',
-          amount: amtCol ? (parseFloat(r[amtCol.key])||0) : 0,
-          flow: 'invest'
-        });
+  db.loans.forEach(r=>allRecent.push({date:r.date,section:'Loan Taken',name:r.name,amount:r.principal,flow:'out'}));
+  db.loanPayments.forEach(p=>{
+    const l=db.loans.find(x=>x.id===p.loanId);
+    allRecent.push({date:p.date,section:'Loan EMI',name:l?l.name:'',amount:p.amount,flow:'out'});
+  });
+  if(typeof loadCustomDefs==='function'){
+    loadCustomDefs().forEach(def=>{
+      const amtCol=def.columns.find(c=>c.type==='number');
+      const nameCol=def.columns.find(c=>c.type==='text');
+      const dateCol=def.columns.find(c=>c.type==='date');
+      (db.custom[def.id]||[]).forEach(r=>{
+        allRecent.push({date:dateCol?r[dateCol.key]:'',section:def.name,name:nameCol?r[nameCol.key]:'',amount:amtCol?(parseFloat(r[amtCol.key])||0):0,flow:'invest'});
       });
     });
   }
   allRecent.sort((a,b)=>b.date.localeCompare(a.date));
   document.querySelector('#tbl-recent tbody').innerHTML=allRecent.slice(0,10).map(r=>`<tr>
     <td>${fmtD(r.date)}</td><td>${r.section}</td><td>${r.name||'—'}</td>
-    <td class="amt ${r.flow==='in'?'amt-g':''}">${r.flow==='in'?'+':r.flow==='out'?'-':''}${fmt(r.amount)}</td>
+    <td class="amt ${r.flow==='in'?'amt-g':r.flow==='out'?'amt-r':''}">${r.flow==='in'?'+':r.flow==='out'?'-':''}${fmt(r.amount)}</td>
   </tr>`).join('')||'<tr class="empty-row"><td colspan="4">No entries yet</td></tr>';
   renderCharts();
 }
