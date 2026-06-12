@@ -174,20 +174,6 @@ const FORM_DEFS = {
   }
 };
 
-function openAddModal(section){
-  const def = FORM_DEFS[section]; if(!def) return;
-  _editSection=section; _editId=null; _editMode=false;
-  document.getElementById('em-icon').textContent=def.icon;
-  document.getElementById('em-title').textContent='Add '+def.title;
-  document.getElementById('em-body').innerHTML=def.fields;
-  document.getElementById('em-err').style.display='none';
-  // default date to today
-  const dateIn=document.querySelector('#em-body input[name="date"]');
-  if(dateIn) dateIn.value=new Date().toISOString().slice(0,10);
-  const monthIn=document.querySelector('#em-body input[name="month"]');
-  if(monthIn) monthIn.value=new Date().toISOString().slice(0,7);
-  document.getElementById('modal-entry').style.display='flex';
-}
 
 function openEditModal(section, id){
   const def=FORM_DEFS[section]; const rec=dbGet(section,id); if(!def||!rec) return;
@@ -213,8 +199,9 @@ function saveEntry(){
   const data={};
   inputs.forEach(el=>{ data[el.name]=el.type==='number'?(+el.value||0):el.value; });
 
-  // validate required
-  if(!data.date||!(data.amount>0)){
+  // validate required — loans use 'principal', others use 'amount'
+  const amountVal = data.amount > 0 || data.principal > 0;
+  if(!data.date || !amountVal){
     errEl.textContent='Date and Amount are required.';
     errEl.style.display='block'; return;
   }
@@ -306,35 +293,27 @@ FORM_DEFS['loans'] = {
   `
 };
 
-FORM_DEFS['loanPayments'] = {
-  icon:'💸', title:'Loan EMI / Payment',
-  fields:`
-    <div class="field-row c2">
-      <div class="field"><label>Date</label><input type="date" name="date" required/></div>
-      <div class="field"><label>For Month</label><input type="month" name="month"/></div>
-    </div>
-    <div class="field">
-      <label>Loan</label>
-      <select name="loanId" id="lp-loan-select">
-        <option value="">Select loan…</option>
-      </select>
-    </div>
-    <div class="field"><label>Amount Paid (₹)</label><input type="number" name="amount" placeholder="0" required/></div>
-    <div class="field"><label>Notes</label><input type="text" name="notes" placeholder="EMI #3, partial payment…"/></div>
-  `
-};
-
-// populate loan dropdown when payment modal opens
-const _origOpenAddModal2 = openAddModal;
+// ── SINGLE DISPATCHER — called by "+ Add Entry" button ──
+// Handles built-in sections and custom sections cleanly
 function openAddModal(page){
-  _origOpenAddModal2(page);
-  if(page==='loanPayments'){
-    setTimeout(()=>{
-      const sel=document.getElementById('lp-loan-select');
-      if(sel){
-        sel.innerHTML='<option value="">Select loan…</option>'+
-          db.loans.filter(l=>l.status==='Active').map(l=>`<option value="${l.id}">${l.name} (${l.lender}) – ${fmt(loanOutstanding(l))} left</option>`).join('');
-      }
-    },50);
+  if(!page) return;
+  // Custom sections
+  if(page.startsWith('custom-')){
+    openCustomAddModal(page.replace('custom-',''));
+    return;
   }
+  // Built-in sections
+  const def = FORM_DEFS[page];
+  if(!def) return;
+  _editSection=page; _editId=null; _editMode=false;
+  document.getElementById('em-icon').textContent=def.icon;
+  document.getElementById('em-title').textContent='Add '+def.title;
+  document.getElementById('em-body').innerHTML=def.fields;
+  document.getElementById('em-err').style.display='none';
+  // Default date to today
+  const dateIn=document.querySelector('#em-body input[name="date"]');
+  if(dateIn) dateIn.value=new Date().toISOString().slice(0,10);
+  const monthIn=document.querySelector('#em-body input[name="month"]');
+  if(monthIn) monthIn.value=new Date().toISOString().slice(0,7);
+  document.getElementById('modal-entry').style.display='flex';
 }
