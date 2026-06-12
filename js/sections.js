@@ -393,9 +393,5 @@ function customSectionsSummaryRows(){
   });
 }
 
-// openAddModal override
-const _origOpenAddModal=typeof openAddModal!=='undefined'?openAddModal:null;
-function openAddModal(page){
-  if(page&&page.startsWith('custom-')){ openCustomAddModal(page.replace('custom-','')); }
-  else if(_origOpenAddModal){ _origOpenAddModal(page); }
-}
+// openAddModal is defined in forms.js as a single clean dispatcher
+
