@@ -28,34 +28,47 @@ function wbToDb(wb){
   function rows(sheet){ return wb.SheetNames.includes(sheet) ? XLSX.utils.sheet_to_json(wb.Sheets[sheet],{defval:''}) : []; }
   db.ppf = rows(SHEETS.PPF).map(r=>({
     id:r.id||uid(), date:r.date||'', bank:r.bank||'', amount:+r.amount||0,
-    status:r.status||'Active', source:r.source||'', details:r.details||''
+    status:r.status||'Active', source:r.source||'', details:r.details||'',
+    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
+    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
   }));
   db.fd = rows(SHEETS.FD).map(r=>({
     id:r.id||uid(), date:r.date||'', fdNumber:r.fdNumber||'', bank:r.bank||'',
     amount:+r.amount||0, rate:+r.rate||0, status:r.status||'Active',
     brokenDate:r.brokenDate||'', brokenAmount:+r.brokenAmount||0,
+    returnDate:r.returnDate||r.brokenDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
     reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||'',
     source:r.source||'', details:r.details||''
   }));
   db.business = rows(SHEETS.BUSINESS).map(r=>({
     id:r.id||uid(), date:r.date||'', name:r.name||'', amount:+r.amount||0,
-    rate:+r.rate||0, status:r.status||'Active', source:r.source||'', details:r.details||''
+    rate:+r.rate||0, status:r.status||'Active', source:r.source||'', details:r.details||'',
+    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
+    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
   }));
   db.outside = rows(SHEETS.OUTSIDE).map(r=>({
     id:r.id||uid(), date:r.date||'', person:r.person||'', amount:+r.amount||0,
-    rate:+r.rate||0, status:r.status||'Active', source:r.source||'', details:r.details||''
+    rate:+r.rate||0, status:r.status||'Active', source:r.source||'', details:r.details||'',
+    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
+    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
   }));
   db.stocks = rows(SHEETS.STOCKS).map(r=>({
     id:r.id||uid(), date:r.date||'', name:r.name||'', amount:+r.amount||0,
-    status:r.status||'Active', details:r.details||''
+    status:r.status||'Active', details:r.details||'',
+    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
+    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
   }));
   db.mf = rows(SHEETS.MF).map(r=>({
     id:r.id||uid(), date:r.date||'', name:r.name||'', amount:+r.amount||0,
-    status:r.status||'Active', details:r.details||''
+    status:r.status||'Active', details:r.details||'',
+    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
+    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
   }));
   db.lic = rows(SHEETS.LIC).map(r=>({
     id:r.id||uid(), date:r.date||'', name:r.name||'', amount:+r.amount||0,
-    status:r.status||'Active', details:r.details||''
+    status:r.status||'Active', details:r.details||'',
+    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
+    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
   }));
   db.expenses = rows(SHEETS.EXPENSES).map(r=>({
     id:r.id||uid(), date:r.date||'', name:r.name||'', category:r.category||'',
@@ -134,39 +147,53 @@ function getWalletSettings(){
 function saveWalletSettings(s){ localStorage.setItem('nf_wallet_settings', JSON.stringify(s)); }
 
 // ── CASH FLOW WALLET BALANCE ──
+// Logic:
+//   INFLOW  = opening balance + salary + closed investment returns (principal + interest)
+//   OUTFLOW = investments made + expenses + loan EMIs + deductions
+//   Closed investment outflow is CANCELLED by its return inflow
 function calcWalletBalance(){
   const settings = getWalletSettings();
-  const startDate = settings.startDate || '';   // e.g. '2026-01-01'
+  const startDate = settings.startDate || '';
   const openingBalance = parseFloat(settings.openingBalance) || 0;
-
-  function afterStart(date){ return !startDate || !date || date >= startDate; }
+  function afterStart(d){ return !startDate || !d || d >= startDate; }
 
   let inflow = openingBalance, outflow = 0;
 
+  // ── INFLOW ──
   // Salary & income
   db.salary.filter(r=>afterStart(r.date)).forEach(r=>inflow+=r.amount);
-  // FD returns when broken
-  db.fd.filter(r=>r.brokenAmount>0&&afterStart(r.brokenDate)).forEach(r=>inflow+=r.brokenAmount);
-  // Investments made (outflow)
-  ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
+
+  // Returns from ALL closed investments (principal returned + interest received)
+  const investKeys = ['ppf','fd','business','outside','stocks','mf','lic'];
+  investKeys.forEach(k=>{
+    db[k].filter(r=>r.status!=='Active' && r.returnDate && afterStart(r.returnDate)).forEach(r=>{
+      inflow += (r.returnAmount||0) + (r.returnInterest||0);
+    });
+    // backward compat: FD that used old brokenAmount field with no returnAmount
+    if(k==='fd'){
+      db.fd.filter(r=>r.status!=='Active' && r.brokenAmount>0 && !r.returnAmount && afterStart(r.brokenDate)).forEach(r=>{
+        inflow += r.brokenAmount;
+      });
+    }
+  });
+
+  // ── OUTFLOW ──
+  // Investments made (only count active ones as outflow; closed ones are self-cancelling via inflow)
+  investKeys.forEach(k=>{
     db[k].filter(r=>afterStart(r.date)).forEach(r=>outflow+=r.amount);
   });
   // Monthly expenses
   db.expenses.filter(r=>afterStart(r.date)).forEach(r=>outflow+=r.amount);
   // Loan EMI payments
   db.loanPayments.filter(p=>afterStart(p.date)).forEach(p=>outflow+=p.amount);
-  // Custom investment sections (outflow)
+  // Custom investment sections
   if(typeof loadCustomDefs==='function'){
-    loadCustomDefs().filter(d=>d.sectionType!=='deduction').forEach(def=>{
+    loadCustomDefs().forEach(def=>{
       const amtCols=def.columns.filter(c=>c.type==='number');
-      (db.custom[def.id]||[]).filter(r=>afterStart(r.date)).forEach(r=>{
-        amtCols.forEach(col=>{ outflow+=parseFloat(r[col.key])||0; });
-      });
-    });
-    // Custom deduction sections (outflow)
-    loadCustomDefs().filter(d=>d.sectionType==='deduction').forEach(def=>{
-      const amtCols=def.columns.filter(c=>c.type==='number');
-      (db.custom[def.id]||[]).filter(r=>afterStart(r.date)).forEach(r=>{
+      const dateCol=def.columns.find(c=>c.type==='date');
+      const isDeduction=def.sectionType==='deduction';
+      // both investment and deduction custom sections are outflow
+      (db.custom[def.id]||[]).filter(r=>afterStart(dateCol?r[dateCol.key]:'')).forEach(r=>{
         amtCols.forEach(col=>{ outflow+=parseFloat(r[col.key])||0; });
       });
     });
@@ -178,20 +205,35 @@ function calcWalletBalance(){
 function monthlyWallet(){
   const settings = getWalletSettings();
   const startDate = settings.startDate || '';
-  function afterStart(date){ return !startDate || !date || date >= startDate; }
+  function afterStart(d){ return !startDate || !d || d >= startDate; }
   const map = {};
   function add(month, flow, amt){
-    if(!month) return;
+    if(!month||!amt) return;
     if(!map[month]) map[month]={in:0,out:0};
     map[month][flow] += amt;
   }
+  // Salary in
   db.salary.filter(r=>afterStart(r.date)).forEach(r=>add(r.month||r.date.slice(0,7),'in',r.amount));
-  db.fd.filter(r=>r.brokenAmount>0&&afterStart(r.brokenDate)).forEach(r=>add(r.brokenDate?.slice(0,7)||'','in',r.brokenAmount));
+  // Investment returns (all sections)
+  ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
+    db[k].filter(r=>r.status!=='Active'&&r.returnDate&&afterStart(r.returnDate)).forEach(r=>{
+      add(r.returnDate.slice(0,7),'in',(r.returnAmount||0)+(r.returnInterest||0));
+    });
+    if(k==='fd'){
+      db.fd.filter(r=>r.status!=='Active'&&r.brokenAmount>0&&!r.returnAmount&&afterStart(r.brokenDate)).forEach(r=>{
+        add(r.brokenDate?.slice(0,7)||'','in',r.brokenAmount);
+      });
+    }
+  });
+  // Investments out
   ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
     db[k].filter(r=>afterStart(r.date)).forEach(r=>add(r.date.slice(0,7),'out',r.amount));
   });
+  // Expenses out
   db.expenses.filter(r=>afterStart(r.date)).forEach(r=>add(r.date.slice(0,7),'out',r.amount));
+  // Loan EMIs out
   db.loanPayments.filter(p=>afterStart(p.date)).forEach(p=>add(p.month||p.date.slice(0,7),'out',p.amount));
+  // Custom sections out
   if(typeof loadCustomDefs==='function'){
     loadCustomDefs().forEach(def=>{
       const amtCols=def.columns.filter(c=>c.type==='number');
