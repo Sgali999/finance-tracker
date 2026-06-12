@@ -220,32 +220,67 @@ let _brkSection=null, _brkId=null;
 function openBreakModal(section, id){
   const rec=dbGet(section,id); if(!rec) return;
   _brkSection=section; _brkId=id;
+
   const nameField=rec.bank||rec.name||rec.person||rec.fdNumber||'';
-  document.getElementById('brk-info').innerHTML=`<strong>${nameField}</strong><br>Invested: <strong>${fmt(rec.amount)}</strong> on ${fmtD(rec.date)}`;
-  document.getElementById('brk-amount').value=rec.amount||'';
-  document.getElementById('brk-date').value=new Date().toISOString().slice(0,10);
-  document.getElementById('brk-reinvest').value='';
-  document.getElementById('brk-note').value='';
-  document.getElementById('brk-remarks').value='';
+  const autoInterest = (rec.rate && rec.date) ? calcInterest(rec.amount, rec.rate, rec.date) : 0;
+
+  document.getElementById('brk-info').innerHTML=
+    `<strong>${nameField}</strong><br>
+     Invested: <strong>${fmt(rec.amount)}</strong> on ${fmtD(rec.date)}
+     ${rec.rate ? `<br>Rate: <strong>${rec.rate}% /yr</strong>` : ''}
+     ${autoInterest>0 ? `<br>Auto-calculated interest to today: <strong style="color:var(--gold)">${fmt(autoInterest)}</strong>` : ''}`;
+
+  document.getElementById('brk-amount').value = rec.amount || '';
+  document.getElementById('brk-interest').value = autoInterest > 0 ? autoInterest : '';
+  document.getElementById('brk-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('brk-reinvest').value = '';
+  document.getElementById('brk-note').value = '';
+  document.getElementById('brk-remarks').value = '';
+
+  if(autoInterest>0){
+    document.getElementById('brk-interest-hint').textContent = `Calculated: ${fmt(autoInterest)} — edit if actual differs`;
+  } else {
+    document.getElementById('brk-interest-hint').textContent = 'Enter actual interest received';
+  }
+
+  updateBrkTotal();
   document.getElementById('modal-break').style.display='flex';
 }
+
+function updateBrkTotal(){
+  const principal = parseFloat(document.getElementById('brk-amount').value)||0;
+  const interest  = parseFloat(document.getElementById('brk-interest').value)||0;
+  document.getElementById('brk-total-display').textContent = fmt(principal + interest);
+}
+
 function closeBreakModal(){ document.getElementById('modal-break').style.display='none'; _brkSection=_brkId=null; }
 
 function confirmBreak(){
   if(!_brkSection||!_brkId) return;
   const statusMap={ppf:'Closed',fd:'Broken',business:'Closed',outside:'Returned',stocks:'Sold',mf:'Redeemed',lic:'Closed'};
+  const principal  = parseFloat(document.getElementById('brk-amount').value)||0;
+  const interest   = parseFloat(document.getElementById('brk-interest').value)||0;
+  const closeDate  = document.getElementById('brk-date').value;
+  const reinvest   = document.getElementById('brk-reinvest').value;
+  const note       = document.getElementById('brk-note').value;
+  const remarks    = document.getElementById('brk-remarks').value;
+
   dbUpdate(_brkSection, _brkId, {
-    status: statusMap[_brkSection]||'Closed',
-    brokenDate: document.getElementById('brk-date').value,
-    brokenAmount: +document.getElementById('brk-amount').value||0,
-    reinvestedInto: document.getElementById('brk-reinvest').value,
-    reinvestNote: document.getElementById('brk-note').value,
-    details: (dbGet(_brkSection,_brkId)?.details||'') + ' | Closed: '+document.getElementById('brk-remarks').value
+    status:          statusMap[_brkSection]||'Closed',
+    returnDate:      closeDate,
+    returnAmount:    principal,
+    returnInterest:  interest,
+    reinvestedInto:  reinvest,
+    reinvestNote:    note,
+    // keep brokenAmount for FD backward compat
+    brokenDate:      closeDate,
+    brokenAmount:    principal + interest,
+    details: (dbGet(_brkSection,_brkId)?.details||'') + (remarks ? ` | Closed: ${remarks}` : '')
   });
   closeBreakModal();
   renderSection(_brkSection);
   renderDashboard();
-  showToast('✓ Investment closed');
+  showToast('✓ Investment closed — ₹'+((principal+interest).toLocaleString('en-IN'))+' added to wallet');
   ghSync();
 }
 
