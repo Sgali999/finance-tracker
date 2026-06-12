@@ -209,10 +209,11 @@ let _sectionColumns = [];
 function openSectionBuilder(existingDef = null){
   _editingSection = existingDef;
   _sectionColumns = existingDef ? JSON.parse(JSON.stringify(existingDef.columns)) : [
-    { key:'date', label:'Date', type:'date', isAmount:false },
-    { key:'name', label:'Name', type:'text', isAmount:false },
-    { key:'amount', label:'Amount', type:'number', isAmount:true },
+    { key:'date',   label:'Date',   type:'date',   isAmount:false },
+    { key:'name',   label:'Name',   type:'text',   isAmount:false },
+    { key:'amount', label:'Amount', type:'number', isAmount:true  },
     { key:'status', label:'Status', type:'status', isAmount:false },
+    { key:'notes',  label:'Notes / Other Details', type:'text', isAmount:false },
   ];
 
   const modal = document.getElementById('modal-section-builder');
