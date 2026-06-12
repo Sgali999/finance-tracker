@@ -1,11 +1,10 @@
-// ── GITHUB LAYER ── robust sync with queue, retry, conflict resolution
+// ── GITHUB LAYER ──
 const FILE_PATH = 'data/finance.xlsx';
 let _cfg = null, _sha = null;
 
-// ── Sync queue — prevents parallel PUTs racing each other ──
-let _syncPending = false;   // a sync is in-flight
-let _syncQueued  = false;   // another sync was requested while one was running
-let _syncTimer   = null;    // debounce timer
+let _syncPending = false;
+let _syncQueued  = false;
+let _syncTimer   = null;
 
 function ghLoadConfig(){
   const s = localStorage.getItem('nf_cfg');
@@ -43,25 +42,17 @@ async function ghLoad(){
   const errEl = document.getElementById('cfg-err');
   errEl.style.display = 'none';
   try {
-    const res = await fetch(
-      `https://api.github.com/repos/${_cfg.repo}/contents/${FILE_PATH}?ref=${_cfg.branch}&t=${Date.now()}`,
-      { headers:{ Authorization:`token ${_cfg.token}`, Accept:'application/vnd.github.v3+json' } }
-    );
+    const res = await _ghGet();
     if(res.status === 404){
-      // First time — no file yet
       const emptyWb = XLSX.utils.book_new();
       wbToDb(emptyWb);
       hideSyncLbl();
       bootApp(emptyWb);
       return;
     }
-    if(!res.ok){
-      const e = await res.json();
-      throw new Error(e.message || `HTTP ${res.status}`);
-    }
+    if(!res.ok){ const e = await res.json(); throw new Error(e.message || `HTTP ${res.status}`); }
     const json = await res.json();
     _sha = json.sha;
-    // Decode base64 → workbook (once)
     const wb = _b64ToWb(json.content);
     wbToDb(wb);
     hideSyncLbl();
@@ -73,27 +64,39 @@ async function ghLoad(){
   }
 }
 
-function _b64ToWb(b64content){
-  const bin   = atob(b64content.replace(/\n/g,''));
+function _b64ToWb(b64){
+  const bin = atob(b64.replace(/\n/g,''));
   const bytes = new Uint8Array(bin.length);
   for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return XLSX.read(bytes, { type:'array' });
 }
 
-// ── SYNC — debounced, queued, with retry ──
-// Called after every data change. Debounces 1.5s so rapid edits batch into one PUT.
-function ghSync(){
-  if(!_cfg){ showConfig(); return; }
-  clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(_doSync, 1500);
+// Cache-busted GET for the file
+function _ghGet(){
+  return fetch(
+    `https://api.github.com/repos/${_cfg.repo}/contents/${FILE_PATH}?ref=${_cfg.branch}&_=${Date.now()}`,
+    { headers:{ Authorization:`token ${_cfg.token}`, Accept:'application/vnd.github.v3+json',
+                'Cache-Control':'no-cache' } }
+  );
 }
 
+// ── SYNC — debounced entry point called after every data change ──
+function ghSync(){
+  if(!_cfg){ showConfig(); return; }
+  // Always reset the debounce timer — rapid changes collapse into one sync
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(()=>{
+    if(_syncPending){
+      // A sync is already running — queue one more for after it finishes
+      _syncQueued = true;
+    } else {
+      _doSync();
+    }
+  }, 1200);
+}
+
+// ── Core sync — always fetches a fresh SHA, retries on conflict ──
 async function _doSync(){
-  if(_syncPending){
-    // Already syncing — mark that another sync is needed after this one finishes
-    _syncQueued = true;
-    return;
-  }
   _syncPending = true;
   _syncQueued  = false;
 
@@ -101,24 +104,26 @@ async function _doSync(){
   if(btn){ btn.textContent = '⟳ Syncing…'; btn.disabled = true; }
   setSyncLbl('Saving…');
 
-  let attempts = 0;
-  while(attempts < 3){
-    attempts++;
+  let success = false;
+
+  for(let attempt = 1; attempt <= 4; attempt++){
     try {
-      // Always fetch the latest SHA before writing (avoids stale SHA conflicts)
-      const shaRes = await fetch(
-        `https://api.github.com/repos/${_cfg.repo}/contents/${FILE_PATH}?ref=${_cfg.branch}&t=${Date.now()}`,
-        { headers:{ Authorization:`token ${_cfg.token}` } }
-      );
+      // ── Step 1: always get the freshest SHA from GitHub ──
+      // Small delay on retry to let GitHub's CDN propagate the previous write
+      if(attempt > 1) await _sleep(600 * attempt);
+
+      const shaRes = await _ghGet();
       if(shaRes.ok){
         const j = await shaRes.json();
-        _sha = j.sha;
-      } else if(shaRes.status !== 404){
-        // 404 is fine (first write); anything else is unexpected
+        _sha = j.sha;           // always overwrite with what GitHub says
+      } else if(shaRes.status === 404){
+        _sha = null;            // file doesn't exist yet — first write
+      } else {
         const e = await shaRes.json();
-        throw new Error(e.message || `SHA fetch failed: ${shaRes.status}`);
+        throw new Error(e.message || `SHA fetch HTTP ${shaRes.status}`);
       }
 
+      // ── Step 2: build workbook from current in-memory state ──
       const wb  = dbToWb();
       const b64 = XLSX.write(wb, { bookType:'xlsx', type:'base64' });
       const body = {
@@ -126,8 +131,9 @@ async function _doSync(){
         content:  b64,
         branch:   _cfg.branch
       };
-      if(_sha) body.sha = _sha;
+      if(_sha) body.sha = _sha;   // required if file already exists
 
+      // ── Step 3: PUT to GitHub ──
       const putRes = await fetch(
         `https://api.github.com/repos/${_cfg.repo}/contents/${FILE_PATH}`,
         { method:'PUT',
@@ -137,59 +143,56 @@ async function _doSync(){
 
       if(putRes.ok){
         const result = await putRes.json();
-        _sha   = result.content.sha;
+        _sha   = result.content.sha;   // store new SHA for next sync
         _dirty = false;
-        showToast('✓ Synced');
+        showToast('✓ Saved');
         setSyncLbl('Synced ✓');
         setTimeout(hideSyncLbl, 2000);
-        break; // success — exit retry loop
+        success = true;
+        break;
       }
 
-      const err = await putRes.json();
+      // ── Handle specific GitHub error codes ──
+      let errMsg = `HTTP ${putRes.status}`;
+      try { errMsg = (await putRes.json()).message || errMsg; } catch(_){}
 
-      if(putRes.status === 409){
-        // SHA conflict — GitHub rejected because file changed remotely
-        // Clear our cached SHA and retry immediately
+      if(putRes.status === 409 || putRes.status === 422){
+        // Conflict or unprocessable — SHA mismatch
+        // Force re-fetch on next attempt (already done at top of loop)
         _sha = null;
-        setSyncLbl(`Conflict, retrying… (${attempts}/3)`);
-        await _sleep(500 * attempts);
-        continue;
+        setSyncLbl(`SHA conflict, retrying (${attempt}/4)…`);
+        continue;  // retry
       }
 
-      if(putRes.status === 422){
-        // Unprocessable — likely stale SHA too
-        _sha = null;
-        await _sleep(500 * attempts);
-        continue;
+      if(putRes.status === 401 || putRes.status === 403){
+        throw new Error('Token expired or no write permission. Go to ⚙ Settings and reconnect.');
       }
 
-      // Other error — not retryable
-      throw new Error(err.message || `HTTP ${putRes.status}`);
+      throw new Error(errMsg);  // non-retryable
 
     } catch(e) {
-      if(attempts >= 3){
+      if(attempt >= 4){
         showToast('⚠ Sync failed: ' + e.message, true);
-        setSyncLbl('Sync failed — tap Sync to retry');
-        setTimeout(hideSyncLbl, 4000);
-      } else {
-        await _sleep(800 * attempts);
+        setSyncLbl('Sync failed — press Sync to retry');
+        setTimeout(hideSyncLbl, 5000);
       }
+      // else loop continues with next attempt
     }
   }
 
   _syncPending = false;
   if(btn){ btn.textContent = '↑ Sync to GitHub'; btn.disabled = false; }
 
-  // If another sync was requested while we were running, fire it now
+  // If more changes happened while we were syncing, do one more sync
+  // Wait a beat so GitHub's CDN propagates our write first
   if(_syncQueued){
     _syncQueued = false;
-    setTimeout(_doSync, 300);
+    setTimeout(_doSync, 1000);   // 1s gap — lets GitHub settle before next write
   }
 }
 
 function _sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
-// ── Sync status labels ──
 function setSyncLbl(t){
   const el = document.getElementById('sync-lbl');
   if(el){ el.textContent = t; el.style.display = 'block'; }
