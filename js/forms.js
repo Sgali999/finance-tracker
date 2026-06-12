@@ -278,3 +278,63 @@ function confirmDelete(){
   showToast('✓ Deleted');
   ghSync();
 }
+
+// ── LOAN FORM DEFS ──
+FORM_DEFS['loans'] = {
+  icon:'🏦', title:'Loan Taken',
+  fields:`
+    <div class="field-hint">⚠️ Loans are liabilities. The principal and EMI payments are deducted from your wallet balance.</div>
+    <div class="field-row c2">
+      <div class="field"><label>Date Taken</label><input type="date" name="date" required/></div>
+      <div class="field"><label>Loan Name / Purpose</label><input type="text" name="name" placeholder="Home Loan, Car Loan…" required/></div>
+    </div>
+    <div class="field-row c2">
+      <div class="field"><label>Lender (Bank / Person)</label><input type="text" name="lender" placeholder="SBI, HDFC, Friend…"/></div>
+      <div class="field"><label>Status</label>
+        <select name="status"><option>Active</option><option>Closed</option></select>
+      </div>
+    </div>
+    <div class="field-row c3">
+      <div class="field"><label>Principal Amount (₹)</label><input type="number" name="principal" placeholder="0" required/></div>
+      <div class="field"><label>Interest Rate (% / yr)</label><input type="number" name="rate" placeholder="9.5" step="0.01"/></div>
+      <div class="field"><label>EMI Amount (₹)</label><input type="number" name="emiAmount" placeholder="0"/></div>
+    </div>
+    <div class="field-row c2">
+      <div class="field"><label>Tenure (months)</label><input type="number" name="tenure" placeholder="60"/></div>
+    </div>
+    <div class="field"><label>Notes / Details</label><textarea name="notes" placeholder="Loan account number, purpose, collateral…"></textarea></div>
+  `
+};
+
+FORM_DEFS['loanPayments'] = {
+  icon:'💸', title:'Loan EMI / Payment',
+  fields:`
+    <div class="field-row c2">
+      <div class="field"><label>Date</label><input type="date" name="date" required/></div>
+      <div class="field"><label>For Month</label><input type="month" name="month"/></div>
+    </div>
+    <div class="field">
+      <label>Loan</label>
+      <select name="loanId" id="lp-loan-select">
+        <option value="">Select loan…</option>
+      </select>
+    </div>
+    <div class="field"><label>Amount Paid (₹)</label><input type="number" name="amount" placeholder="0" required/></div>
+    <div class="field"><label>Notes</label><input type="text" name="notes" placeholder="EMI #3, partial payment…"/></div>
+  `
+};
+
+// populate loan dropdown when payment modal opens
+const _origOpenAddModal2 = openAddModal;
+function openAddModal(page){
+  _origOpenAddModal2(page);
+  if(page==='loanPayments'){
+    setTimeout(()=>{
+      const sel=document.getElementById('lp-loan-select');
+      if(sel){
+        sel.innerHTML='<option value="">Select loan…</option>'+
+          db.loans.filter(l=>l.status==='Active').map(l=>`<option value="${l.id}">${l.name} (${l.lender}) – ${fmt(loanOutstanding(l))} left</option>`).join('');
+      }
+    },50);
+  }
+}
