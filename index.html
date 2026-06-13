@@ -123,48 +123,49 @@
       <button class="nav-item" data-page="yearly" onclick="nav('yearly')">
         <span class="nav-icon">📅</span> Yearly Report
       </button>
-      <div class="nav-section">Investments</div>
-      <button class="nav-item" data-page="ppf" onclick="nav('ppf')">
-        <span class="nav-icon">🏦</span> PPF
-      </button>
-      <button class="nav-item" data-page="fd" onclick="nav('fd')">
-        <span class="nav-icon">🏧</span> Fixed Deposits
-      </button>
-      <button class="nav-item" data-page="business" onclick="nav('business')">
-        <span class="nav-icon">💼</span> Business
-      </button>
-      <button class="nav-item" data-page="outside" onclick="nav('outside')">
-        <span class="nav-icon">🤝</span> Outside Given
-      </button>
-      <button class="nav-item" data-page="stocks" onclick="nav('stocks')">
-        <span class="nav-icon">📈</span> Stocks
-      </button>
-      <button class="nav-item" data-page="mf" onclick="nav('mf')">
-        <span class="nav-icon">💹</span> Mutual Funds
-      </button>
-      <button class="nav-item" data-page="lic" onclick="nav('lic')">
-        <span class="nav-icon">🛡️</span> LIC
-      </button>
-      <div class="nav-section">Tracking</div>
-      <button class="nav-item" data-page="expenses" onclick="nav('expenses')">
-        <span class="nav-icon">🧾</span> Monthly Expenses
-      </button>
-      <button class="nav-item" data-page="salary" onclick="nav('salary')">
-        <span class="nav-icon">💰</span> Salary / Income
-      </button>
-      <button class="nav-item" data-page="loans" onclick="nav('loans')">
-        <span class="nav-icon">🏦</span> Loans Taken
-      </button>
-      <button class="nav-item" data-page="wallet" onclick="nav('wallet')">
-        <span class="nav-icon">👛</span> Wallet / Cash Flow
-      </button>
-      <div class="nav-section" style="margin-top:8px">Custom Sections</div>
-      <button class="nav-item nav-new-section" onclick="openSectionBuilder('investment')">
-        <span class="nav-icon">📈</span> + Investment Section
-      </button>
-      <button class="nav-item nav-new-section deduction" onclick="openSectionBuilder('deduction')">
-        <span class="nav-icon">💳</span> + Deduction Section
-      </button>
+
+      <!-- INVESTMENTS — collapsed by default -->
+      <div class="nav-group">
+        <button class="nav-group-header" onclick="toggleNavGroup(this)">
+          <span>Investments</span>
+          <span class="nav-chevron">›</span>
+        </button>
+        <div class="nav-group-items">
+          <button class="nav-item" data-page="ppf" onclick="nav('ppf')"><span class="nav-icon">🏦</span> PPF</button>
+          <button class="nav-item" data-page="fd" onclick="nav('fd')"><span class="nav-icon">🏧</span> Fixed Deposits</button>
+          <button class="nav-item" data-page="business" onclick="nav('business')"><span class="nav-icon">💼</span> Business</button>
+          <button class="nav-item" data-page="outside" onclick="nav('outside')"><span class="nav-icon">🤝</span> Outside Given</button>
+          <button class="nav-item" data-page="stocks" onclick="nav('stocks')"><span class="nav-icon">📈</span> Stocks</button>
+          <button class="nav-item" data-page="mf" onclick="nav('mf')"><span class="nav-icon">💹</span> Mutual Funds</button>
+          <button class="nav-item" data-page="lic" onclick="nav('lic')"><span class="nav-icon">🛡️</span> LIC</button>
+        </div>
+      </div>
+
+      <!-- TRACKING — expanded by default -->
+      <div class="nav-group open">
+        <button class="nav-group-header" onclick="toggleNavGroup(this)">
+          <span>Tracking</span>
+          <span class="nav-chevron">›</span>
+        </button>
+        <div class="nav-group-items">
+          <button class="nav-item" data-page="expenses" onclick="nav('expenses')"><span class="nav-icon">🧾</span> Monthly Expenses</button>
+          <button class="nav-item" data-page="salary" onclick="nav('salary')"><span class="nav-icon">💰</span> Salary / Income</button>
+          <button class="nav-item" data-page="loans" onclick="nav('loans')"><span class="nav-icon">🏦</span> Loans Taken</button>
+          <button class="nav-item" data-page="wallet" onclick="nav('wallet')"><span class="nav-icon">👛</span> Wallet / Cash Flow</button>
+        </div>
+      </div>
+
+      <!-- CUSTOM SECTIONS — collapsed by default -->
+      <div class="nav-group" id="nav-group-custom">
+        <button class="nav-group-header" onclick="toggleNavGroup(this)">
+          <span>Custom Sections</span>
+          <span class="nav-chevron">›</span>
+        </button>
+        <div class="nav-group-items" id="nav-custom-items">
+          <button class="nav-item nav-new-section" onclick="openSectionBuilder('investment')"><span class="nav-icon">📈</span> + Investment Section</button>
+          <button class="nav-item nav-new-section deduction" onclick="openSectionBuilder('deduction')"><span class="nav-icon">💳</span> + Deduction Section</button>
+        </div>
+      </div>
     </nav>
     <div class="sidebar-foot">
       <button class="btn-sync" onclick="ghSync()" id="sync-btn">↑ Sync to GitHub</button>
