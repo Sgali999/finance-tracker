@@ -21,7 +21,7 @@ function nav(page){
   const pg=document.getElementById('page-'+page);
   if(pg){
     pg.classList.add('active');
-    pg.style.display = (page==='yearly') ? 'flex' : 'block';
+    pg.style.display='block';
   }
   const nb=document.querySelector(`[data-page="${page}"]`);
   if(nb) nb.classList.add('active');
