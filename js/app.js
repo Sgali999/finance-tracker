@@ -12,22 +12,29 @@ const PAGE_TITLES={
 function nav(page){
   currentPage = page;
 
-  // Hide all normal pages
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  // Hide/show yearly separately (it's not a .page)
+  // Toggle pages-wrap vs yearly — they share the same flex space in main-area
+  const wrap   = document.querySelector('.pages-wrap');
   const yearly = document.getElementById('page-yearly');
-  if(yearly) yearly.style.display = (page === 'yearly') ? 'flex' : 'none';
+  if(page === 'yearly'){
+    if(wrap)   wrap.style.display   = 'none';
+    if(yearly) yearly.style.display = 'flex';
+  } else {
+    if(wrap)   wrap.style.display   = '';
+    if(yearly) yearly.style.display = 'none';
+  }
 
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
-
+  // Normal page activation
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   if(page !== 'yearly'){
     const pg = document.getElementById('page-'+page);
     if(pg) pg.classList.add('active');
   }
-  const nb = document.querySelector(`[data-page="${page}"]`);
-  if(nb) nb.classList.add('active');
+
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  const nb  = document.querySelector(`[data-page="${page}"]`);
   const bnb = document.querySelector(`[data-bpage="${page}"]`);
+  if(nb)  nb.classList.add('active');
   if(bnb) bnb.classList.add('active');
 
   document.getElementById('topbar-title').textContent = PAGE_TITLES[page]||page;
