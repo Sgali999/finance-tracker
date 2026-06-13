@@ -69,9 +69,12 @@ nav{flex:1;padding:8px 0}
 .topbar-actions{display:flex;gap:6px;flex-shrink:0}
 /* hamburger — hidden on desktop */
 .menu-btn{display:none;background:none;border:none;color:var(--text);font-size:1.3rem;cursor:pointer;padding:4px 8px;line-height:1}
-.pages-wrap{flex:1;overflow-y:auto;padding:16px 16px 80px}
+.pages-wrap{flex:1;overflow-y:auto;padding:16px 16px 80px;min-height:0}
 .page{display:none}
 .page.active{display:block}
+/* Yearly page — sits directly in main-area flex column, fills remaining height */
+#page-yearly{display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0}
+#page-yearly.active{display:flex}
 
 /* ══ BOTTOM NAV (mobile only, hidden on desktop) ══ */
 .bottom-nav{
@@ -210,26 +213,40 @@ nav{flex:1;padding:8px 0}
 .icon-pick:hover{background:var(--bg3);border-color:var(--border2)}
 
 /* ══ YEARLY REPORT ══ */
-.year-tab-bar{ display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px }
-.year-tab{ background:var(--bg3);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-sm);padding:5px 16px;font-size:.8rem;cursor:pointer;transition:all .15s }
-.year-tab.active{ background:var(--accent);color:#fff;border-color:var(--accent) }
+.year-tab-bar{
+  display:flex;gap:6px;flex-wrap:wrap;
+  padding:12px 16px;flex-shrink:0;
+  border-bottom:1px solid var(--border);
+  background:var(--bg);
+}
+.year-tab{
+  background:var(--bg3);border:1px solid var(--border);
+  color:var(--muted);border-radius:var(--r-sm);
+  padding:5px 16px;font-size:.8rem;cursor:pointer;transition:all .15s;
+}
+.year-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
-/* Two-column layout — left sticky, right flows naturally, pages-wrap scrolls everything */
+/* Two-column layout fills the space below the tabs */
 .year-layout{
   display:grid;
-  grid-template-columns:210px 1fr;
-  gap:14px;
-  align-items:start;   /* key: don't stretch columns to equal height */
+  grid-template-columns:220px 1fr;
+  gap:0;
+  flex:1;              /* takes remaining height inside #page-yearly flex */
+  overflow:hidden;     /* children will scroll internally */
+  min-height:0;
 }
 .year-left{
-  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  background:var(--bg2);border-right:1px solid var(--border);
   padding:14px;
-  position:sticky;
-  top:0;               /* sticks to top of pages-wrap viewport as user scrolls */
+  overflow-y:auto;     /* left panel scrolls independently */
+  height:100%;
 }
 .year-right{
+  overflow-y:auto;     /* right panel scrolls independently */
+  height:100%;
+  padding:14px;
   display:flex;flex-direction:column;gap:12px;
-  min-width:0;         /* prevents overflow breaking grid */
+  min-width:0;
 }
 
 .yr-left-title{ font-size:.72rem;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px }
@@ -261,6 +278,8 @@ nav{flex:1;padding:8px 0}
 .yr-card-total.g{color:var(--green)}.yr-card-total.r{color:var(--red)}
 
 @media(max-width:768px){
-  .year-layout{ grid-template-columns:1fr }
-  .year-left{ position:static }
+  #page-yearly.active{height:auto;overflow:visible}
+  .year-layout{grid-template-columns:1fr;overflow:visible;height:auto}
+  .year-left{height:auto;overflow-y:visible;border-right:none;border-bottom:1px solid var(--border)}
+  .year-right{height:auto;overflow-y:visible}
 }
