@@ -12,37 +12,34 @@ const PAGE_TITLES={
 function nav(page){
   currentPage = page;
 
-  // Toggle pages-wrap vs yearly — they share the same flex space in main-area
+  // Show/hide pages-wrap vs yearly
   const wrap   = document.querySelector('.pages-wrap');
   const yearly = document.getElementById('page-yearly');
-  if(page === 'yearly'){
-    if(wrap)   wrap.style.display   = 'none';
-    if(yearly) yearly.style.display = 'flex';
-  } else {
-    if(wrap)   wrap.style.display   = '';
-    if(yearly) yearly.style.display = 'none';
-  }
 
-  // Normal page activation
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  if(page !== 'yearly'){
-    const pg = document.getElementById('page-'+page);
+  // Hide all .page elements
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+
+  if(page === 'yearly'){
+    // yearly is not a .page — show it directly, scroll to top
+    if(yearly){ yearly.style.display = 'flex'; }
+    if(wrap) wrap.scrollTop = 0;
+  } else {
+    if(yearly) yearly.style.display = 'none';
+    const pg = document.getElementById('page-' + page);
     if(pg) pg.classList.add('active');
   }
 
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
-  const nb  = document.querySelector(`[data-page="${page}"]`);
-  const bnb = document.querySelector(`[data-bpage="${page}"]`);
-  if(nb)  nb.classList.add('active');
-  if(bnb) bnb.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(b  => b.classList.remove('active'));
+  document.querySelectorAll('.bnav-item').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
+  document.querySelector(`[data-bpage="${page}"]`)?.classList.add('active');
 
-  document.getElementById('topbar-title').textContent = PAGE_TITLES[page]||page;
-  const addBtn = document.querySelector('.topbar-actions');
-  addBtn.style.display = (page==='dashboard'||page==='wallet'||page==='yearly') ? 'none' : 'flex';
+  document.getElementById('topbar-title').textContent = PAGE_TITLES[page] || page;
+  document.querySelector('.topbar-actions').style.display =
+    (page==='dashboard'||page==='wallet'||page==='yearly') ? 'none' : 'flex';
 
-  if(page==='wallet') loadWalletSettingsUI();
-  if(page!=='dashboard') renderSection(page);
+  if(page === 'wallet') loadWalletSettingsUI();
+  if(page !== 'dashboard') renderSection(page);
   else renderDashboard();
 }
 
@@ -90,11 +87,13 @@ function bootApp(wb){
   document.getElementById('app').style.display='flex';
   const main = document.querySelector('.main-area');
 
-  // Wrap all .page elements (not yearly) into pages-wrap for scrolling
   if(!main.querySelector('.pages-wrap')){
     const wrap = document.createElement('div');
     wrap.className = 'pages-wrap';
+    // Move ALL .page elements AND yearly into pages-wrap
     [...main.querySelectorAll('.page')].forEach(p => wrap.appendChild(p));
+    const yearly = document.getElementById('page-yearly');
+    if(yearly) wrap.appendChild(yearly);
     main.appendChild(wrap);
   }
 
