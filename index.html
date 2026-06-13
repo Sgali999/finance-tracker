@@ -181,7 +181,11 @@
       </div>
     </div>
 
-    <!-- DASHBOARD -->
+    <!-- YEARLY REPORT — lives directly in main-area (not pages-wrap) so it can fill height -->
+    <div id="page-yearly">
+      <div class="year-tab-bar" id="year-tabs"></div>
+      <div id="year-content"></div>
+    </div>
     <div class="page active" id="page-dashboard">
       <div class="kpi-row" style="grid-template-columns:repeat(3,1fr)">
         <div class="kpi green"><div class="kpi-l">Total Invested (Active)</div><div class="kpi-v" id="kpi-invested">₹0</div></div>
@@ -419,11 +423,6 @@
           <tbody></tbody>
         </table>
       </div>
-    </div>
-    <!-- YEARLY REPORT -->
-    <div class="page" id="page-yearly">
-      <div class="year-tab-bar" id="year-tabs"></div>
-      <div id="year-content"></div>
     </div>
 
 </div><!-- /app -->
