@@ -258,3 +258,77 @@ nav{flex:1;padding:8px 0}
   .topbar{padding:0 10px}
   .topbar-title{font-size:.85rem}
 }
+
+/* ══ YEARLY REPORT TWO-COLUMN LAYOUT ══ */
+.year-layout{
+  display:grid;
+  grid-template-columns:240px 1fr;
+  gap:14px;
+  align-items:start;
+  height:calc(100vh - 180px); /* fills visible area */
+}
+.year-left{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;position:sticky;top:0;
+  max-height:calc(100vh - 180px);overflow-y:auto;
+}
+.year-right{
+  overflow-y:auto;
+  max-height:calc(100vh - 180px);
+  display:flex;flex-direction:column;gap:12px;
+}
+.yr-summary-block{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--border);
+}
+.yr-summary-block:last-of-type{border-bottom:none}
+.yr-summary-block.net{
+  background:var(--bg3);border-radius:var(--r-sm);
+  padding:8px 10px;margin-top:4px;border-bottom:none;
+}
+.yr-sum-title{font-size:.68rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.yr-sum-val{font-size:.95rem;font-weight:700}
+.yr-sum-val.g{color:var(--green)}.yr-sum-val.r{color:var(--red)}
+.yr-sum-val.b{color:var(--blue)}.yr-sum-val.gold{color:var(--gold)}
+.yr-sec-total{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:5px 0;border-bottom:1px solid var(--border);
+}
+.yr-sec-total:last-child{border-bottom:none}
+.yr-sec-total-label{font-size:.72rem;color:var(--text)}
+.yr-sec-total-val{font-size:.75rem;font-weight:700}
+.yr-sec-total-val.g{color:var(--green)}.yr-sec-total-val.r{color:var(--red)}
+.yr-sec-total-val.muted{color:var(--muted)}
+.year-section-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;
+  flex-shrink:0;
+}
+.year-section-card h4{
+  font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.05em;margin-bottom:10px;display:flex;align-items:center;gap:8px;
+}
+.yr-count{
+  background:var(--bg4);color:var(--muted);border-radius:20px;
+  padding:1px 7px;font-size:.65rem;font-weight:600;text-transform:none;letter-spacing:0;
+}
+.yr-card-total{
+  text-align:right;margin-top:8px;font-size:.78rem;font-weight:700;
+  padding-top:6px;border-top:1px solid var(--border);
+}
+.yr-card-total.g{color:var(--green)}.yr-card-total.r{color:var(--red)}
+
+/* Stack on mobile */
+@media(max-width:768px){
+  .year-layout{
+    grid-template-columns:1fr;
+    height:auto;
+  }
+  .year-left{
+    position:static;
+    max-height:none;
+  }
+  .year-right{
+    max-height:none;
+    overflow-y:visible;
+  }
+}
