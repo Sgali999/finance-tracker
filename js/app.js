@@ -11,18 +11,12 @@ const PAGE_TITLES={
 
 function nav(page){
   currentPage=page;
-  document.querySelectorAll('.page').forEach(p=>{
-    p.classList.remove('active');
-    p.style.display='none';
-  });
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
 
   const pg=document.getElementById('page-'+page);
-  if(pg){
-    pg.classList.add('active');
-    pg.style.display='block';
-  }
+  if(pg) pg.classList.add('active');
   const nb=document.querySelector(`[data-page="${page}"]`);
   if(nb) nb.classList.add('active');
   const bnb=document.querySelector(`[data-bpage="${page}"]`);
@@ -80,13 +74,26 @@ function bootApp(wb){
   document.getElementById('modal-config').style.display='none';
   document.getElementById('app').style.display='flex';
   const main=document.querySelector('.main-area');
-  const existing=main.querySelector('.pages-wrap');
-  if(!existing){
-    const wrap=document.createElement('div');
-    wrap.className='pages-wrap';
-    [...main.querySelectorAll('.page')].forEach(p=>wrap.appendChild(p));
+
+  // Build pages-wrap for normal scrollable pages
+  let wrap = main.querySelector('.pages-wrap');
+  if(!wrap){
+    wrap = document.createElement('div');
+    wrap.className = 'pages-wrap';
+    // Move all pages except yearly into pages-wrap
+    [...main.querySelectorAll('.page')].forEach(p => {
+      if(p.id !== 'page-yearly') wrap.appendChild(p);
+    });
     main.appendChild(wrap);
   }
+
+  // Yearly page goes directly into main-area (not inside pages-wrap)
+  // so it can manage its own full-height layout
+  const yearly = document.getElementById('page-yearly');
+  if(yearly && yearly.parentNode !== main){
+    main.appendChild(yearly);
+  }
+
   bootCustomSections(wb||XLSX.utils.book_new());
   nav('dashboard');
 }
