@@ -634,11 +634,131 @@ function _yCard(title, body){
   return `<div class="year-section-card"><h4>${title}</h4>${body}</div>`;
 }
 
-// ── MASTER RENDER ──
+// ── WALLET LEDGER ──
+function renderLedger(){
+  const settings     = getWalletSettings();
+  const startDate    = settings.startDate || '';
+  const openingBal   = parseFloat(settings.openingBalance) || 0;
+  function afterStart(d){ return !startDate || !d || d >= startDate; }
+
+  // Build every wallet transaction from all data sources
+  const txns = [];
+
+  function push(date, type, flow, description, amount){
+    if(!afterStart(date)) return;
+    txns.push({ date: date||'', type, flow, description, amount: Math.round(amount) });
+  }
+
+  // Salary / Income — IN
+  db.salary.forEach(r => push(r.date, 'Salary', 'in',
+    `${r.type||'Salary'}${r.source?' — '+r.source:''}${r.month?' ('+r.month+')':''}`, r.amount));
+
+  // Investment Returns — IN (when closed)
+  ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
+    db[k].filter(r=>r.status!=='Active' && r.returnDate).forEach(r=>{
+      const name = r.bank||r.name||r.person||r.fdNumber||k.toUpperCase();
+      const total = (r.returnAmount||0)+(r.returnInterest||0);
+      if(total > 0) push(r.returnDate, 'Investment Return', 'in',
+        `${k.toUpperCase()} returned — ${name}${r.returnInterest?' (P:'+fmt(r.returnAmount||0)+' + I:'+fmt(r.returnInterest||0)+')':''}`, total);
+    });
+    // backward compat FD
+    if(k==='fd'){
+      db.fd.filter(r=>r.status!=='Active'&&r.brokenAmount>0&&!r.returnAmount&&r.brokenDate).forEach(r=>{
+        push(r.brokenDate,'Investment Return','in',`FD returned — ${r.bank||r.fdNumber||''}`,r.brokenAmount);
+      });
+    }
+  });
+
+  // Investments made — OUT
+  ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
+    const labels = {ppf:'PPF',fd:'FD',business:'Business',outside:'Outside Given',stocks:'Stocks',mf:'Mutual Fund',lic:'LIC'};
+    db[k].forEach(r=>{
+      const name = r.bank||r.name||r.person||r.fdNumber||'';
+      push(r.date, 'Investment', 'out', `${labels[k]}${name?' — '+name:''}`, r.amount);
+    });
+  });
+
+  // Expenses — OUT
+  db.expenses.forEach(r => push(r.date, 'Expense', 'out',
+    `${r.name||'Expense'}${r.category?' ('+r.category+')':''}`, r.amount));
+
+  // Loan EMI payments — OUT
+  db.loanPayments.forEach(p=>{
+    const loan = db.loans.find(l=>l.id===p.loanId);
+    push(p.date, 'Loan EMI', 'out', `EMI — ${loan?loan.name:'Loan'}`, p.amount);
+  });
+
+  // Custom sections
+  if(typeof loadCustomDefs==='function'){
+    loadCustomDefs().forEach(def=>{
+      const dateCol = def.columns.find(c=>c.type==='date');
+      const amtCol  = def.columns.find(c=>c.type==='number');
+      const nameCol = def.columns.find(c=>c.type==='text');
+      if(!dateCol||!amtCol) return;
+      const flowType = def.sectionType==='deduction' ? 'Deduction' : 'Investment';
+      (db.custom[def.id]||[]).forEach(r=>{
+        const nm = nameCol ? r[nameCol.key] : '';
+        push(r[dateCol.key], flowType, 'out',
+          `${def.icon} ${def.name}${nm?' — '+nm:''}`, parseFloat(r[amtCol.key])||0);
+      });
+    });
+  }
+
+  // Sort by date ascending (oldest first) for running balance
+  txns.sort((a,b)=> a.date.localeCompare(b.date) || 0);
+
+  // Compute running balance
+  let running = openingBal;
+  const withBalance = txns.map((t,i)=>{
+    running += t.flow==='in' ? t.amount : -t.amount;
+    return { ...t, running, sno: i+1 };
+  });
+
+  // ── KPI ──
+  const totalIn  = txns.filter(t=>t.flow==='in').reduce((s,t)=>s+t.amount,0);
+  const totalOut = txns.filter(t=>t.flow==='out').reduce((s,t)=>s+t.amount,0);
+  const balance  = openingBal + totalIn - totalOut;
+  document.getElementById('kpi-ledger').innerHTML =
+    skpi('Total Transactions', txns.length, 'b') +
+    skpi('Total IN', fmt(totalIn), 'g') +
+    skpi('Total OUT', fmt(totalOut), 'r') +
+    skpi('Current Balance', fmt(balance), balance>=0?'g':'r');
+
+  // ── Filters ──
+  const flowF   = document.getElementById('fil-ledger-flow')?.value  || 'all';
+  const typeF   = document.getElementById('fil-ledger-type')?.value  || 'all';
+  const monthF  = document.getElementById('fil-ledger-month')?.value || '';
+  const searchF = (document.getElementById('fil-ledger-search')?.value||'').toLowerCase();
+
+  let filtered = [...withBalance].reverse(); // newest first for display
+  if(flowF  !== 'all') filtered = filtered.filter(t=>t.flow===flowF);
+  if(typeF  !== 'all') filtered = filtered.filter(t=>t.type===typeF);
+  if(monthF)           filtered = filtered.filter(t=>t.date.startsWith(monthF));
+  if(searchF)          filtered = filtered.filter(t=>
+    t.description.toLowerCase().includes(searchF)||t.type.toLowerCase().includes(searchF));
+
+  // ── Table ──
+  const tbody = document.querySelector('#tbl-ledger tbody');
+  if(!filtered.length){
+    tbody.innerHTML=`<tr class="empty-row"><td colspan="7">No transactions found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(t=>`<tr class="${t.flow==='in'?'ledger-row-in':'ledger-row-out'}">
+    <td style="color:var(--dim);font-size:.7rem">${t.sno}</td>
+    <td>${fmtD(t.date)}</td>
+    <td><span class="ledger-type-badge ledger-${t.type.toLowerCase().replace(/\s+/g,'-')}">${t.type}</span></td>
+    <td><span class="badge badge-${t.flow}">${t.flow.toUpperCase()}</span></td>
+    <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.description}">${t.description}</td>
+    <td class="amt ${t.flow==='in'?'amt-g':'amt-r'}">${t.flow==='in'?'+':'-'}${fmt(t.amount)}</td>
+    <td class="amt ${t.running>=0?'amt-g':'amt-r'}" style="font-weight:700">${fmt(t.running)}</td>
+  </tr>`).join('');
+}
 const RENDER_MAP={
   ppf:renderPPF,fd:renderFD,business:renderBusiness,outside:renderOutside,
   stocks:renderStocks,mf:renderMF,lic:renderLIC,expenses:renderExpenses,
-  salary:renderSalary,loans:renderLoans,wallet:renderWallet,yearly:renderYearly
+  salary:renderSalary,loans:renderLoans,wallet:renderWallet,
+  ledger:renderLedger,yearly:renderYearly
 };
 function renderSection(s){
   if(s && s.startsWith('custom-')){ renderCustomSection(s.replace('custom-','')); return; }
