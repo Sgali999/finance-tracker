@@ -11,16 +11,20 @@ const PAGE_TITLES={
 
 function nav(page){
   currentPage=page;
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>{
+    p.classList.remove('active');
+    p.style.display='none';
+  });
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
 
   const pg=document.getElementById('page-'+page);
-  if(pg) pg.classList.add('active');
-  // sidebar nav
+  if(pg){
+    pg.classList.add('active');
+    pg.style.display = (page==='yearly') ? 'flex' : 'block';
+  }
   const nb=document.querySelector(`[data-page="${page}"]`);
   if(nb) nb.classList.add('active');
-  // bottom nav
   const bnb=document.querySelector(`[data-bpage="${page}"]`);
   if(bnb) bnb.classList.add('active');
 
