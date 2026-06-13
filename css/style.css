@@ -73,12 +73,10 @@ nav{flex:1;padding:8px 0}
 .page{display:none}
 .page.active{display:block}
 /* Yearly page — sits directly in main-area, hidden by default */
+/* Yearly page scrolls inside pages-wrap like any other page */
 #page-yearly{
   display:none;
   flex-direction:column;
-  flex:1;
-  overflow:hidden;
-  min-height:0;
 }
 
 /* ══ BOTTOM NAV (mobile only, hidden on desktop) ══ */
@@ -236,19 +234,19 @@ nav{flex:1;padding:8px 0}
   display:grid;
   grid-template-columns:220px 1fr;
   gap:0;
-  flex:1;
-  min-height:0;
-  min-width:0;
   width:100%;
-  align-items:stretch;
+  /* No fixed height — let content determine height, page-yearly scrolls */
 }
 .year-left{
   background:var(--bg2);border-right:1px solid var(--border);
   padding:14px;
+  position:sticky;
+  top:0;              /* sticks as pages-wrap scrolls */
+  align-self:flex-start;
+  max-height:calc(100vh - 52px);
   overflow-y:auto;
 }
 .year-right{
-  overflow-y:scroll;   /* always show scrollbar so user knows it scrolls */
   padding:14px;
   display:flex;flex-direction:column;gap:12px;
   min-width:0;
@@ -292,8 +290,6 @@ nav{flex:1;padding:8px 0}
 .yr-card-total.g{color:var(--green)}.yr-card-total.r{color:var(--red)}
 
 @media(max-width:768px){
-  #page-yearly.active{height:auto;overflow:visible}
-  .year-layout{grid-template-columns:1fr;overflow:visible;height:auto}
-  .year-left{height:auto;overflow-y:visible;border-right:none;border-bottom:1px solid var(--border)}
-  .year-right{height:auto;overflow-y:visible}
+  .year-layout{grid-template-columns:1fr}
+  .year-left{position:static;max-height:none;overflow-y:visible;border-right:none;border-bottom:1px solid var(--border)}
 }
