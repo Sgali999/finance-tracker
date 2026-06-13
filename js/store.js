@@ -261,6 +261,23 @@ function totalInterestEarned(){
   db.outside.filter(r=>r.status==='Active').forEach(r=>{ t+=calcInterest(r.amount,r.rate,r.date); });
   return t;
 }
+function totalReturns(){
+  // Total principal + interest received from ALL closed investments
+  let principal = 0, interest = 0;
+  ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
+    db[k].filter(r=>r.status!=='Active' && r.returnAmount).forEach(r=>{
+      principal += r.returnAmount||0;
+      interest  += r.returnInterest||0;
+    });
+    // backward compat
+    if(k==='fd'){
+      db.fd.filter(r=>r.status!=='Active'&&r.brokenAmount>0&&!r.returnAmount).forEach(r=>{
+        principal += r.brokenAmount||0;
+      });
+    }
+  });
+  return { total: principal + interest, principal, interest };
+}
 function allTimeIncome(){
   return db.salary.reduce((s,r)=>s+r.amount,0);
 }
