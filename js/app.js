@@ -10,21 +10,29 @@ const PAGE_TITLES={
 };
 
 function nav(page){
-  currentPage=page;
+  currentPage = page;
+
+  // Hide all normal pages
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  // Hide/show yearly separately (it's not a .page)
+  const yearly = document.getElementById('page-yearly');
+  if(yearly) yearly.style.display = (page === 'yearly') ? 'flex' : 'none';
+
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
 
-  const pg=document.getElementById('page-'+page);
-  if(pg) pg.classList.add('active');
-  const nb=document.querySelector(`[data-page="${page}"]`);
+  if(page !== 'yearly'){
+    const pg = document.getElementById('page-'+page);
+    if(pg) pg.classList.add('active');
+  }
+  const nb = document.querySelector(`[data-page="${page}"]`);
   if(nb) nb.classList.add('active');
-  const bnb=document.querySelector(`[data-bpage="${page}"]`);
+  const bnb = document.querySelector(`[data-bpage="${page}"]`);
   if(bnb) bnb.classList.add('active');
 
-  document.getElementById('topbar-title').textContent=PAGE_TITLES[page]||page;
-  const addBtn=document.querySelector('.topbar-actions');
-  addBtn.style.display=(page==='dashboard'||page==='wallet'||page==='yearly')?'none':'flex';
+  document.getElementById('topbar-title').textContent = PAGE_TITLES[page]||page;
+  const addBtn = document.querySelector('.topbar-actions');
+  addBtn.style.display = (page==='dashboard'||page==='wallet'||page==='yearly') ? 'none' : 'flex';
 
   if(page==='wallet') loadWalletSettingsUI();
   if(page!=='dashboard') renderSection(page);
@@ -73,25 +81,14 @@ function saveWalletSettingsUI(){
 function bootApp(wb){
   document.getElementById('modal-config').style.display='none';
   document.getElementById('app').style.display='flex';
-  const main=document.querySelector('.main-area');
+  const main = document.querySelector('.main-area');
 
-  // Build pages-wrap for normal scrollable pages
-  let wrap = main.querySelector('.pages-wrap');
-  if(!wrap){
-    wrap = document.createElement('div');
+  // Wrap all .page elements (not yearly) into pages-wrap for scrolling
+  if(!main.querySelector('.pages-wrap')){
+    const wrap = document.createElement('div');
     wrap.className = 'pages-wrap';
-    // Move all pages except yearly into pages-wrap
-    [...main.querySelectorAll('.page')].forEach(p => {
-      if(p.id !== 'page-yearly') wrap.appendChild(p);
-    });
+    [...main.querySelectorAll('.page')].forEach(p => wrap.appendChild(p));
     main.appendChild(wrap);
-  }
-
-  // Yearly page goes directly into main-area (not inside pages-wrap)
-  // so it can manage its own full-height layout
-  const yearly = document.getElementById('page-yearly');
-  if(yearly && yearly.parentNode !== main){
-    main.appendChild(yearly);
   }
 
   bootCustomSections(wb||XLSX.utils.book_new());
