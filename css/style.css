@@ -322,3 +322,19 @@ nav{flex:1;padding:8px 0}
   .year-layout{grid-template-columns:1fr}
   .year-left{position:static;max-height:none;overflow-y:visible;border-right:none;border-bottom:1px solid var(--border)}
 }
+
+/* ══ WALLET LEDGER ══ */
+.ledger-row-in td{ border-left:2px solid var(--green) }
+.ledger-row-out td{ border-left:2px solid transparent }
+.ledger-row-out td:first-child{ border-left:2px solid var(--red) }
+.ledger-type-badge{
+  display:inline-block;padding:2px 7px;border-radius:4px;
+  font-size:.62rem;font-weight:600;background:var(--bg4);color:var(--muted);
+  white-space:nowrap;
+}
+.ledger-salary{ background:var(--green-bg);color:var(--green) }
+.ledger-investment-return{ background:var(--blue-bg);color:var(--blue) }
+.ledger-investment{ background:var(--purple-bg);color:var(--purple) }
+.ledger-expense{ background:var(--red-bg);color:var(--red) }
+.ledger-loan-emi{ background:var(--gold-bg);color:var(--gold) }
+.ledger-deduction{ background:var(--red-bg);color:var(--red) }
