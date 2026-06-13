@@ -33,6 +33,7 @@ function nav(page){
   document.querySelectorAll('.bnav-item').forEach(b => b.classList.remove('active'));
   document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
   document.querySelector(`[data-bpage="${page}"]`)?.classList.add('active');
+  expandGroupForPage(page);
 
   document.getElementById('topbar-title').textContent = PAGE_TITLES[page] || page;
   document.querySelector('.topbar-actions').style.display =
@@ -43,7 +44,38 @@ function nav(page){
   else renderDashboard();
 }
 
-// ── MOBILE SIDEBAR ──
+// ── COLLAPSIBLE NAV GROUPS ──
+function toggleNavGroup(headerBtn){
+  const group = headerBtn.closest('.nav-group');
+  group.classList.toggle('open');
+  // Save state to localStorage
+  const groupId = group.id || group.querySelector('.nav-group-header span')?.textContent;
+  if(groupId){
+    const states = JSON.parse(localStorage.getItem('nf_nav_states')||'{}');
+    states[groupId] = group.classList.contains('open');
+    localStorage.setItem('nf_nav_states', JSON.stringify(states));
+  }
+}
+
+function restoreNavStates(){
+  const states = JSON.parse(localStorage.getItem('nf_nav_states')||'{}');
+  document.querySelectorAll('.nav-group').forEach(group=>{
+    const key = group.id || group.querySelector('.nav-group-header span')?.textContent;
+    if(key && states[key] !== undefined){
+      group.classList.toggle('open', states[key]);
+    }
+  });
+}
+
+// Auto-expand the group containing the navigated-to page
+function expandGroupForPage(page){
+  const btn = document.querySelector(`[data-page="${page}"]`);
+  if(!btn) return;
+  const group = btn.closest('.nav-group');
+  if(group && !group.classList.contains('open')){
+    group.classList.add('open');
+  }
+}
 function toggleSidebar(){
   const sb=document.getElementById('app')?.querySelector('.sidebar')||document.querySelector('.sidebar');
   const ov=document.getElementById('sidebar-overlay');
@@ -98,6 +130,7 @@ function bootApp(wb){
   }
 
   bootCustomSections(wb||XLSX.utils.book_new());
+  restoreNavStates();
   nav('dashboard');
 }
 
