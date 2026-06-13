@@ -41,6 +41,35 @@ code{background:var(--bg4);padding:1px 5px;border-radius:3px;font-size:11px}
 .brand{padding:16px 18px;font-size:1.05rem;font-weight:700;color:var(--accent2);letter-spacing:-.02em;border-bottom:1px solid var(--border);flex-shrink:0}
 nav{flex:1;padding:8px 0}
 .nav-section{padding:14px 16px 4px;font-size:.65rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+
+/* ── COLLAPSIBLE NAV GROUPS ── */
+.nav-group{ overflow:hidden }
+.nav-group-header{
+  display:flex;align-items:center;justify-content:space-between;
+  width:100%;padding:8px 16px;
+  background:none;border:none;cursor:pointer;
+  font-size:.65rem;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.08em;
+  transition:color .15s;
+}
+.nav-group-header:hover{ color:var(--muted) }
+.nav-chevron{
+  font-size:.8rem;color:var(--dim);
+  transition:transform .2s ease;
+  display:inline-block;
+}
+.nav-group.open .nav-chevron{ transform:rotate(90deg) }
+.nav-group-items{
+  display:none;
+  flex-direction:column;
+}
+.nav-group.open .nav-group-items{ display:flex }
+.nav-sub-group{ padding:4px 0 }
+.nav-sub-label{
+  padding:4px 16px 2px 28px;
+  font-size:.6rem;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.06em;
+}
 .nav-item{
   display:flex;align-items:center;gap:9px;width:100%;
   padding:8px 16px;background:none;border:none;
