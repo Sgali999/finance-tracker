@@ -6,7 +6,8 @@ const PAGE_TITLES={
   business:'Business Investments', outside:'Outside Given Amounts',
   stocks:'Stocks', mf:'Mutual Funds', lic:'LIC Policies',
   expenses:'Monthly Expenses', salary:'Salary & Income',
-  loans:'Loans Taken', wallet:'👛 Wallet & Cash Flow', yearly:'📅 Yearly Report'
+  loans:'Loans Taken', wallet:'👛 Wallet & Cash Flow',
+  ledger:'📒 Wallet Ledger — Full Transaction History', yearly:'📅 Yearly Report'
 };
 
 function nav(page){
@@ -37,7 +38,7 @@ function nav(page){
 
   document.getElementById('topbar-title').textContent = PAGE_TITLES[page] || page;
   document.querySelector('.topbar-actions').style.display =
-    (page==='dashboard'||page==='wallet'||page==='yearly') ? 'none' : 'flex';
+    (page==='dashboard'||page==='wallet'||page==='yearly'||page==='ledger') ? 'none' : 'flex';
 
   if(page === 'wallet') loadWalletSettingsUI();
   if(page !== 'dashboard') renderSection(page);
