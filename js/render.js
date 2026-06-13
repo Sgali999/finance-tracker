@@ -385,7 +385,7 @@ function renderWalletChart(mw){
 
 // ── YEARLY REPORT ──
 function renderYearly(selectedYear){
-  // Collect all years from all data
+  // Collect all years
   const allDates=[];
   ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>db[k].forEach(r=>r.date&&allDates.push(r.date)));
   db.expenses.forEach(r=>r.date&&allDates.push(r.date));
@@ -395,221 +395,243 @@ function renderYearly(selectedYear){
     const dc=def.columns.find(c=>c.type==='date');
     (db.custom[def.id]||[]).forEach(r=>dc&&r[dc.key]&&allDates.push(r[dc.key]));
   });
-  const years=[...new Set(allDates.map(d=>d.slice(0,4)).filter(y=>y.match(/^\d{4}$/)))].sort().reverse();
+  const years=[...new Set(allDates.map(d=>(d||'').slice(0,4)).filter(y=>y.match(/^\d{4}$/)))].sort().reverse();
+
+  const tabsEl    = document.getElementById('year-tabs');
+  const contentEl = document.getElementById('year-content');
+
   if(!years.length){
-    document.getElementById('year-tabs').innerHTML='';
-    document.getElementById('year-kpi-row').innerHTML='';
-    document.getElementById('year-content').innerHTML='<p style="color:var(--muted);text-align:center;padding:48px">No data yet. Add entries to see yearly reports.</p>';
+    tabsEl.innerHTML='';
+    contentEl.innerHTML='<p style="color:var(--muted);text-align:center;padding:60px;font-size:.9rem">No data yet. Add entries to see yearly reports.</p>';
     return;
   }
 
   const year = selectedYear || years[0];
 
-  // ── Year tabs ──
-  document.getElementById('year-tabs').innerHTML = years.map(y=>
+  // ── Tabs ──
+  tabsEl.innerHTML = years.map(y=>
     `<button class="year-tab ${y===year?'active':''}" onclick="renderYearly('${y}')">${y}</button>`
   ).join('');
 
-  // ── Aggregate for selected year ──
+  // ── Aggregate ──
   const ySalary   = db.salary.filter(r=>r.date.startsWith(year)).reduce((s,r)=>s+r.amount,0);
   const yExp      = db.expenses.filter(r=>r.date.startsWith(year)).reduce((s,r)=>s+r.amount,0);
   const yInvested = ['ppf','fd','business','outside','stocks','mf','lic']
     .reduce((s,k)=>s+db[k].filter(r=>r.date.startsWith(year)).reduce((a,r)=>a+r.amount,0),0);
   const yReturns  = ['ppf','fd','business','outside','stocks','mf','lic']
-    .reduce((s,k)=>s+db[k].filter(r=>r.returnDate?.startsWith(year)).reduce((a,r)=>a+(r.returnAmount||0)+(r.returnInterest||0),0),0);
-  const yInterest = ['fd','business','outside']
-    .reduce((s,k)=>s+db[k].filter(r=>r.date.startsWith(year)).reduce((a,r)=>a+calcInterest(r.amount,r.rate,r.date),0),0);
+    .reduce((s,k)=>s+db[k].filter(r=>(r.returnDate||'').startsWith(year)&&r.status!=='Active')
+      .reduce((a,r)=>a+(r.returnAmount||0)+(r.returnInterest||0),0),0);
   const yLoans    = db.loans.filter(r=>r.date.startsWith(year)).reduce((s,r)=>s+r.principal,0);
   const yNet      = ySalary + yReturns - yExp;
 
-  // ── LEFT PANEL: summary ──
-  const leftHtml = `
-    <div class="yr-summary-block">
-      <div class="yr-sum-title">💰 Income</div>
-      <div class="yr-sum-val g">${fmt(ySalary)}</div>
-    </div>
-    <div class="yr-summary-block">
-      <div class="yr-sum-title">🧾 Expenses</div>
-      <div class="yr-sum-val r">${fmt(yExp)}</div>
-    </div>
-    <div class="yr-summary-block">
-      <div class="yr-sum-title">📦 Invested</div>
-      <div class="yr-sum-val b">${fmt(yInvested)}</div>
-    </div>
-    <div class="yr-summary-block">
-      <div class="yr-sum-title">✅ Returns</div>
-      <div class="yr-sum-val g">${fmt(yReturns)}</div>
-    </div>
-    <div class="yr-summary-block">
-      <div class="yr-sum-title">📈 Interest</div>
-      <div class="yr-sum-val gold">${fmt(yInterest)}</div>
-    </div>
-    ${yLoans>0?`<div class="yr-summary-block">
-      <div class="yr-sum-title">🏦 Loans</div>
-      <div class="yr-sum-val r">${fmt(yLoans)}</div>
-    </div>`:''}
-    <div class="yr-summary-block net">
-      <div class="yr-sum-title">Net (In - Out)</div>
-      <div class="yr-sum-val ${yNet>=0?'g':'r'}">${fmt(yNet)}</div>
-    </div>
-    <hr style="border:none;border-top:1px solid var(--border);margin:10px 0"/>
-    <div class="yr-sum-title" style="margin-bottom:6px">Section Totals</div>
-    ${_yearSectionTotals(year)}`;
-
-  // ── RIGHT PANEL: section detail tables ──
-  const rightHtml = _yearSectionTables(year);
-
-  document.getElementById('year-kpi-row').innerHTML = '';
-  document.getElementById('year-content').innerHTML = `
-    <div class="year-layout">
-      <div class="year-left" id="year-left">${leftHtml}</div>
-      <div class="year-right" id="year-right">${rightHtml}</div>
-    </div>`;
-}
-
-function _yearSectionTotals(year){
-  const secs = [
-    {label:'Salary',  key:'salary',   amtKey:'amount',    icon:'💰', flow:'in'},
-    {label:'FD',      key:'fd',       amtKey:'amount',    icon:'🏧', flow:'out'},
-    {label:'PPF',     key:'ppf',      amtKey:'amount',    icon:'🏦', flow:'out'},
-    {label:'Business',key:'business', amtKey:'amount',    icon:'💼', flow:'out'},
-    {label:'Outside', key:'outside',  amtKey:'amount',    icon:'🤝', flow:'out'},
-    {label:'Stocks',  key:'stocks',   amtKey:'amount',    icon:'📈', flow:'out'},
-    {label:'MF',      key:'mf',       amtKey:'amount',    icon:'💹', flow:'out'},
-    {label:'LIC',     key:'lic',      amtKey:'amount',    icon:'🛡️', flow:'out'},
-    {label:'Expenses',key:'expenses', amtKey:'amount',    icon:'🧾', flow:'out'},
+  // ── LEFT PANEL ──
+  const summaryItems = [
+    {label:'Income',    val:ySalary,   cls:'g', icon:'💰'},
+    {label:'Expenses',  val:yExp,      cls:'r', icon:'🧾'},
+    {label:'Invested',  val:yInvested, cls:'b', icon:'📦'},
+    {label:'Returns',   val:yReturns,  cls:'g', icon:'✅'},
   ];
-  let html='';
-  secs.forEach(s=>{
-    const rows=db[s.key].filter(r=>r.date.startsWith(year));
-    if(!rows.length) return;
-    const total=rows.reduce((a,r)=>a+(parseFloat(r[s.amtKey])||0),0);
-    html+=`<div class="yr-sec-total">
+  if(yLoans) summaryItems.push({label:'Loans',val:yLoans,cls:'r',icon:'🏦'});
+
+  const sectionTotals = [
+    {k:'salary',   label:'Salary',    amtKey:'amount',    icon:'💰', g:true},
+    {k:'fd',       label:'FD',        amtKey:'amount',    icon:'🏧'},
+    {k:'ppf',      label:'PPF',       amtKey:'amount',    icon:'🏦'},
+    {k:'business', label:'Business',  amtKey:'amount',    icon:'💼'},
+    {k:'outside',  label:'Outside',   amtKey:'amount',    icon:'🤝'},
+    {k:'stocks',   label:'Stocks',    amtKey:'amount',    icon:'📈'},
+    {k:'mf',       label:'MF',        amtKey:'amount',    icon:'💹'},
+    {k:'lic',      label:'LIC',       amtKey:'amount',    icon:'🛡️'},
+    {k:'expenses', label:'Expenses',  amtKey:'amount',    icon:'🧾', r:true},
+    {k:'loans',    label:'Loans',     amtKey:'principal', icon:'🏦', r:true},
+  ];
+
+  let secTotHtml = sectionTotals.map(s=>{
+    const rows = db[s.k].filter(r=>r.date.startsWith(year));
+    if(!rows.length) return '';
+    const total = rows.reduce((a,r)=>a+(parseFloat(r[s.amtKey])||0),0);
+    return `<div class="yr-sec-total">
       <span class="yr-sec-total-label">${s.icon} ${s.label}</span>
-      <span class="yr-sec-total-val ${s.flow==='in'?'g':'muted'}">${fmt(total)}</span>
+      <span class="yr-sec-total-val ${s.g?'g':s.r?'r':'muted'}">${fmt(total)}</span>
     </div>`;
-  });
-  // Custom sections
+  }).join('');
+
   if(typeof loadCustomDefs==='function'){
     loadCustomDefs().forEach(def=>{
-      const dateCol=def.columns.find(c=>c.type==='date');
-      const amtCol=def.columns.find(c=>c.type==='number');
-      if(!dateCol||!amtCol) return;
-      const rows=(db.custom[def.id]||[]).filter(r=>r[dateCol.key]?.startsWith(year));
+      const dc=def.columns.find(c=>c.type==='date');
+      const ac=def.columns.find(c=>c.type==='number');
+      if(!dc||!ac) return;
+      const rows=(db.custom[def.id]||[]).filter(r=>r[dc.key]?.startsWith(year));
       if(!rows.length) return;
-      const total=rows.reduce((a,r)=>a+(parseFloat(r[amtCol.key])||0),0);
-      html+=`<div class="yr-sec-total">
+      const total=rows.reduce((a,r)=>a+(parseFloat(r[ac.key])||0),0);
+      secTotHtml+=`<div class="yr-sec-total">
         <span class="yr-sec-total-label">${def.icon} ${def.name}</span>
         <span class="yr-sec-total-val ${def.sectionType==='deduction'?'r':'muted'}">${fmt(total)}</span>
       </div>`;
     });
   }
-  return html || '<div style="color:var(--muted);font-size:.75rem">No data</div>';
-}
 
-function _yearSectionTables(year){
-  let html='';
+  const leftHtml = `
+    <div class="yr-left-title">${year} Summary</div>
+    ${summaryItems.map(i=>`
+      <div class="yr-sum-row">
+        <span class="yr-sum-icon">${i.icon}</span>
+        <span class="yr-sum-label">${i.label}</span>
+        <span class="yr-sum-val ${i.cls}">${fmt(i.val)}</span>
+      </div>`).join('')}
+    <div class="yr-net-box ${yNet>=0?'g':'r'}">
+      <span style="font-size:.68rem;opacity:.8">NET (Income + Returns − Expenses)</span>
+      <span class="yr-net-val">${fmt(yNet)}</span>
+    </div>
+    <div class="yr-divider"></div>
+    <div class="yr-left-subtitle">By Section</div>
+    <div class="yr-sec-totals">${secTotHtml||'<div style="color:var(--muted);font-size:.72rem">No data for '+year+'</div>'}</div>`;
 
-  // Returns received this year
-  const closedThisYear=[];
+  // ── RIGHT PANEL — all sections ──
+  let rightHtml = '';
+
+  // Returns this year
+  const closedRows=[];
   ['ppf','fd','business','outside','stocks','mf','lic'].forEach(k=>{
-    db[k].filter(r=>r.returnDate?.startsWith(year)&&r.status!=='Active').forEach(r=>{
-      closedThisYear.push({date:r.returnDate,name:r.bank||r.name||r.person||r.fdNumber,
+    db[k].filter(r=>(r.returnDate||'').startsWith(year)&&r.status!=='Active').forEach(r=>{
+      closedRows.push({date:r.returnDate,name:r.bank||r.name||r.person||r.fdNumber||'',
         principal:r.returnAmount||0,interest:r.returnInterest||0,
         total:(r.returnAmount||0)+(r.returnInterest||0)});
     });
   });
-  if(closedThisYear.length){
-    html+=_yearCard(`✅ Investment Returns in ${year}`,
-      `<table class="tbl"><thead><tr><th>Date</th><th>Name</th><th>Principal</th><th>Interest</th><th>Total</th></tr></thead>
-      <tbody>${closedThisYear.sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`<tr>
-        <td>${fmtD(r.date)}</td><td>${r.name||'—'}</td>
-        <td class="amt">${fmt(r.principal)}</td>
-        <td class="interest-live">${fmt(r.interest)}</td>
-        <td class="amt amt-g">+${fmt(r.total)}</td>
-      </tr>`).join('')}</tbody></table>
-      <div class="yr-card-total g">Total: ${fmt(closedThisYear.reduce((s,r)=>s+r.total,0))}</div>`
+  if(closedRows.length){
+    rightHtml += _yCard(`✅ Returns Received — <span class="yr-count">${closedRows.length}</span>`,
+      _yTable(
+        [{l:'Date'},{l:'Name'},{l:'Principal',amt:true,g:true},{l:'Interest',gold:true},{l:'Total',amt:true,g:true}],
+        closedRows.sort((a,b)=>b.date.localeCompare(a.date)).map(r=>[
+          fmtD(r.date), r.name||'—', fmt(r.principal), fmt(r.interest), '+'+fmt(r.total)
+        ]),
+        [{g:false},{g:false},{g:true},{gold:true},{g:true}]
+      ) + `<div class="yr-card-total g">Total: ${fmt(closedRows.reduce((s,r)=>s+r.total,0))}</div>`
     );
   }
 
-  // Built-in sections
-  const sections=[
-    {label:'💰 Salary / Income', rows:db.salary.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'month',l:'Month'},{k:'type',l:'Type'},{k:'amount',l:'Amount',amt:true,g:true},{k:'source',l:'Source'}]},
-    {label:'🏧 Fixed Deposits', rows:db.fd.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'fdNumber',l:'FD No.'},{k:'bank',l:'Bank'},{k:'amount',l:'Amount',amt:true},{k:'rate',l:'Rate'},{k:'status',l:'Status'}]},
-    {label:'🏦 PPF', rows:db.ppf.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'bank',l:'Bank'},{k:'amount',l:'Amount',amt:true},{k:'status',l:'Status'}]},
-    {label:'💼 Business', rows:db.business.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'name',l:'Name'},{k:'amount',l:'Amount',amt:true},{k:'rate',l:'Rate'},{k:'status',l:'Status'}]},
-    {label:'🤝 Outside Given', rows:db.outside.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'person',l:'Person'},{k:'amount',l:'Amount',amt:true},{k:'rate',l:'Rate'},{k:'status',l:'Status'}]},
-    {label:'📈 Stocks', rows:db.stocks.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'name',l:'Stock'},{k:'amount',l:'Amount',amt:true},{k:'status',l:'Status'}]},
-    {label:'💹 Mutual Funds', rows:db.mf.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'name',l:'Fund'},{k:'amount',l:'Amount',amt:true},{k:'status',l:'Status'}]},
-    {label:'🛡️ LIC', rows:db.lic.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'name',l:'Policy'},{k:'amount',l:'Amount',amt:true},{k:'status',l:'Status'}]},
-    {label:'🧾 Monthly Expenses', rows:db.expenses.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'name',l:'Name'},{k:'category',l:'Category'},{k:'amount',l:'Amount',amt:true,r:true}]},
-    {label:'🏦 Loans Taken', rows:db.loans.filter(r=>r.date.startsWith(year)),
-     cols:[{k:'date',l:'Date'},{k:'name',l:'Loan'},{k:'lender',l:'Lender'},{k:'principal',l:'Principal',amt:true},{k:'rate',l:'Rate'}]},
-  ];
+  // Salary
+  const salRows = db.salary.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(salRows.length) rightHtml += _yCard(`💰 Salary / Income — <span class="yr-count">${salRows.length}</span> — <span class="yr-card-inline-total g">${fmt(salRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Month'},{l:'Type'},{l:'Amount',amt:true,g:true},{l:'Source'}],
+      salRows.map(r=>[fmtD(r.date),r.month||'—',r.type||'Salary',fmt(r.amount),r.source||'—']),
+      [{},{},{},{g:true},{}]));
+
+  // FD
+  const fdRows = db.fd.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(fdRows.length) rightHtml += _yCard(`🏧 Fixed Deposits — <span class="yr-count">${fdRows.length}</span> — <span class="yr-card-inline-total">${fmt(fdRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'FD No.'},{l:'Bank'},{l:'Amount',amt:true},{l:'Rate'},{l:'Status'}],
+      fdRows.map(r=>[fmtD(r.date),r.fdNumber||'—',r.bank||'—',fmt(r.amount),r.rate?r.rate+'%':'—',r.status]),
+      [{},{},{},{},{},{}], {statusCol:5}));
+
+  // PPF
+  const ppfRows = db.ppf.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(ppfRows.length) rightHtml += _yCard(`🏦 PPF — <span class="yr-count">${ppfRows.length}</span> — <span class="yr-card-inline-total">${fmt(ppfRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Bank'},{l:'Amount',amt:true},{l:'Status'}],
+      ppfRows.map(r=>[fmtD(r.date),r.bank||'—',fmt(r.amount),r.status]),
+      [{},{},{},{}], {statusCol:3}));
+
+  // Business
+  const bizRows = db.business.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(bizRows.length) rightHtml += _yCard(`💼 Business — <span class="yr-count">${bizRows.length}</span> — <span class="yr-card-inline-total">${fmt(bizRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Name'},{l:'Amount',amt:true},{l:'Rate'},{l:'Status'}],
+      bizRows.map(r=>[fmtD(r.date),r.name||'—',fmt(r.amount),r.rate?r.rate+'%':'—',r.status]),
+      [{},{},{},{},{}], {statusCol:4}));
+
+  // Outside
+  const outRows = db.outside.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(outRows.length) rightHtml += _yCard(`🤝 Outside Given — <span class="yr-count">${outRows.length}</span> — <span class="yr-card-inline-total">${fmt(outRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Person'},{l:'Amount',amt:true},{l:'Rate'},{l:'Status'}],
+      outRows.map(r=>[fmtD(r.date),r.person||'—',fmt(r.amount),r.rate?r.rate+'%':'—',r.status]),
+      [{},{},{},{},{}], {statusCol:4}));
+
+  // Stocks
+  const stkRows = db.stocks.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(stkRows.length) rightHtml += _yCard(`📈 Stocks — <span class="yr-count">${stkRows.length}</span> — <span class="yr-card-inline-total">${fmt(stkRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Stock'},{l:'Amount',amt:true},{l:'Status'}],
+      stkRows.map(r=>[fmtD(r.date),r.name||'—',fmt(r.amount),r.status]),
+      [{},{},{},{}], {statusCol:3}));
+
+  // MF
+  const mfRows = db.mf.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(mfRows.length) rightHtml += _yCard(`💹 Mutual Funds — <span class="yr-count">${mfRows.length}</span> — <span class="yr-card-inline-total">${fmt(mfRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Fund'},{l:'Amount',amt:true},{l:'Status'}],
+      mfRows.map(r=>[fmtD(r.date),r.name||'—',fmt(r.amount),r.status]),
+      [{},{},{},{}], {statusCol:3}));
+
+  // LIC
+  const licRows = db.lic.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(licRows.length) rightHtml += _yCard(`🛡️ LIC — <span class="yr-count">${licRows.length}</span> — <span class="yr-card-inline-total">${fmt(licRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Policy'},{l:'Amount',amt:true},{l:'Status'}],
+      licRows.map(r=>[fmtD(r.date),r.name||'—',fmt(r.amount),r.status]),
+      [{},{},{},{}], {statusCol:3}));
+
+  // Expenses
+  const expRows = db.expenses.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(expRows.length) rightHtml += _yCard(`🧾 Expenses — <span class="yr-count">${expRows.length}</span> — <span class="yr-card-inline-total r">${fmt(expRows.reduce((s,r)=>s+r.amount,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Name'},{l:'Category'},{l:'Amount',amt:true,r:true}],
+      expRows.map(r=>[fmtD(r.date),r.name||'—',r.category||'—',fmt(r.amount)]),
+      [{},{},{},{r:true}])
+    + `<div class="yr-card-total r">Total: ${fmt(expRows.reduce((s,r)=>s+r.amount,0))}</div>`);
+
+  // Loans
+  const loanRows = db.loans.filter(r=>r.date.startsWith(year)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(loanRows.length) rightHtml += _yCard(`🏦 Loans — <span class="yr-count">${loanRows.length}</span> — <span class="yr-card-inline-total r">${fmt(loanRows.reduce((s,r)=>s+r.principal,0))}</span>`,
+    _yTable([{l:'Date'},{l:'Loan'},{l:'Lender'},{l:'Principal',amt:true,r:true},{l:'Rate'}],
+      loanRows.map(r=>[fmtD(r.date),r.name||'—',r.lender||'—',fmt(r.principal),r.rate?r.rate+'%':'—']),
+      [{},{},{},{r:true},{}]));
 
   // Custom sections
   if(typeof loadCustomDefs==='function'){
     loadCustomDefs().forEach(def=>{
-      const dateCol=def.columns.find(c=>c.type==='date');
-      if(!dateCol) return;
-      const rows=(db.custom[def.id]||[]).filter(r=>r[dateCol.key]?.startsWith(year));
+      const dc=def.columns.find(c=>c.type==='date');
+      if(!dc) return;
+      const rows=(db.custom[def.id]||[]).filter(r=>r[dc.key]?.startsWith(year)).sort((a,b)=>(b[dc.key]||'').localeCompare(a[dc.key]||''));
       if(!rows.length) return;
-      sections.push({
-        label:def.icon+' '+def.name,
-        rows,
-        cols:def.columns.map(c=>({
-          k:c.key, l:c.label,
-          amt:c.type==='number',
-          r:def.sectionType==='deduction',
-          g:false,
-          date:c.type==='date',
-          status:c.type==='status'
-        }))
-      });
+      const ac=def.columns.find(c=>c.type==='number');
+      const total=ac?rows.reduce((s,r)=>s+(parseFloat(r[ac.key])||0),0):0;
+      const isDed=def.sectionType==='deduction';
+      const headers=def.columns.map(c=>({l:c.label}));
+      const bodyRows=rows.map(r=>def.columns.map(c=>{
+        const v=r[c.key]??'—';
+        if(c.type==='date') return fmtD(v);
+        if(c.type==='number') return fmt(parseFloat(v)||0);
+        if(c.type==='rate') return v?v+'%':'—';
+        if(c.type==='status') return v;
+        return String(v).slice(0,22);
+      }));
+      const styles=def.columns.map(c=>({amt:c.type==='number',r:isDed&&c.type==='number',g:!isDed&&c.type==='number'}));
+      const statusColIdx=def.columns.findIndex(c=>c.type==='status');
+      rightHtml+=_yCard(
+        `${def.icon} ${def.name} — <span class="yr-count">${rows.length}</span>${total?` — <span class="yr-card-inline-total ${isDed?'r':''}">${fmt(total)}</span>`:''}`,
+        _yTable(headers,bodyRows,styles,statusColIdx>=0?{statusCol:statusColIdx}:{})
+      );
     });
   }
 
-  sections.forEach(sec=>{
-    if(!sec.rows.length) return;
-    const amtCol = sec.cols.find(c=>c.amt);
-    const total = amtCol ? sec.rows.reduce((s,r)=>s+(parseFloat(r[amtCol.k])||0),0) : 0;
-    const thead = sec.cols.map(c=>`<th>${c.l}</th>`).join('');
-    const tbody = sec.rows.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(r=>{
-      const cells = sec.cols.map(c=>{
-        const v = r[c.k]??'—';
-        if(c.k==='date'||c.date) return `<td>${fmtD(v)}</td>`;
-        if(c.amt) return `<td class="amt ${c.g?'amt-g':c.r?'amt-r':''}">${fmt(parseFloat(v)||0)}</td>`;
-        if(c.k==='status'||c.status) return `<td>${statusBadge(v)}</td>`;
-        if(c.k==='rate') return `<td>${v?v+'%':'—'}</td>`;
-        return `<td>${String(v).slice(0,22)}</td>`;
-      }).join('');
-      return `<tr>${cells}</tr>`;
-    }).join('');
-    html+=_yearCard(
-      `${sec.label} <span class="yr-count">${sec.rows.length}</span>`,
-      `<div style="overflow-x:auto">
-        <table class="tbl"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
-      </div>
-      ${total?`<div class="yr-card-total ${amtCol?.g?'g':amtCol?.r?'r':''}">${amtCol?.r?'Total: -':'Total: '}${fmt(total)}</div>`:''}`
-    );
-  });
+  if(!rightHtml) rightHtml=`<div style="color:var(--muted);text-align:center;padding:60px;font-size:.85rem">No transactions in ${year}.</div>`;
 
-  return html || `<div style="color:var(--muted);text-align:center;padding:40px">No transactions in ${year}.</div>`;
+  contentEl.innerHTML = `<div class="year-layout"><div class="year-left">${leftHtml}</div><div class="year-right">${rightHtml}</div></div>`;
 }
 
-function _yearCard(title, body){
-  return `<div class="year-section-card">
-    <h4>${title}</h4>${body}
-  </div>`;
+// ── Yearly helper: build table ──
+function _yTable(headers, rows, styles=[], opts={}){
+  const thead = headers.map(h=>`<th>${h.l}</th>`).join('');
+  const tbody = rows.map(r=>{
+    const cells = r.map((v,i)=>{
+      const s = styles[i]||{};
+      if(opts.statusCol===i) return `<td>${statusBadge(v)}</td>`;
+      const cls = s.g?'amt-g':s.r?'amt-r':s.gold?'interest-live':'';
+      return `<td ${s.amt||cls?`class="${['amt',cls].filter(Boolean).join(' ')}"`:''} >${v}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><table class="tbl"><thead><tr>${thead}</tr></thead><tbody>${tbody||'<tr class="empty-row"><td colspan="'+headers.length+'">—</td></tr>'}</tbody></table></div>`;
+}
+
+function _yCard(title, body){
+  return `<div class="year-section-card"><h4>${title}</h4>${body}</div>`;
 }
 
 // ── MASTER RENDER ──
