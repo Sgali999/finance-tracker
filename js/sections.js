@@ -83,19 +83,20 @@ function buildCustomSectionDOM(def){
 function addCustomNavItem(def){
   const navId = 'nav-custom-' + def.id;
   if(document.getElementById(navId)) return;
-  const nav = document.querySelector('nav');
 
   const isDeduction = def.sectionType === 'deduction';
-  const groupId = isDeduction ? 'nav-section-deductions' : 'nav-section-investments-custom';
-  const groupLabel = isDeduction ? 'Deductions' : 'Custom Investments';
+  const groupId = isDeduction ? 'nav-group-deductions' : 'nav-group-investments-custom';
+  const groupLabel = isDeduction ? '💳 Deductions' : '📁 Custom Investments';
+  const parentGroupItems = document.getElementById('nav-custom-items');
 
-  let header = document.getElementById(groupId);
-  if(!header){
-    header = document.createElement('div');
-    header.className = 'nav-section';
-    header.id = groupId;
-    header.textContent = groupLabel;
-    nav.appendChild(header);
+  // Find or create sub-group inside custom sections
+  let subGroup = document.getElementById(groupId);
+  if(!subGroup && parentGroupItems){
+    subGroup = document.createElement('div');
+    subGroup.className = 'nav-sub-group';
+    subGroup.id = groupId;
+    subGroup.innerHTML = `<div class="nav-sub-label">${groupLabel}</div>`;
+    parentGroupItems.appendChild(subGroup);
   }
 
   const btn = document.createElement('button');
@@ -105,7 +106,15 @@ function addCustomNavItem(def){
   btn.innerHTML = `<span class="nav-icon">${def.icon||'📁'}</span> ${def.name}
     <button class="nav-section-del" onclick="event.stopPropagation();confirmDeleteSection('${def.id}')" title="Delete section">✕</button>`;
   btn.onclick = () => nav_custom(def.id);
-  nav.appendChild(btn);
+
+  const target = subGroup || parentGroupItems;
+  if(target) target.appendChild(btn);
+
+  // Auto-expand custom sections group when items are added
+  const customGroup = document.getElementById('nav-group-custom');
+  if(customGroup && !customGroup.classList.contains('open')){
+    customGroup.classList.add('open');
+  }
 }
 
 // ── Render section table ──
