@@ -238,6 +238,8 @@ nav{flex:1;padding:8px 0}
   gap:0;
   flex:1;
   min-height:0;
+  min-width:0;
+  width:100%;
   align-items:stretch;
 }
 .year-left{
@@ -246,11 +248,20 @@ nav{flex:1;padding:8px 0}
   overflow-y:auto;
 }
 .year-right{
-  overflow-y:auto;
+  overflow-y:scroll;   /* always show scrollbar so user knows it scrolls */
   padding:14px;
   display:flex;flex-direction:column;gap:12px;
   min-width:0;
+  width:100%;
 }
+/* Style the scrollbar */
+.year-right::-webkit-scrollbar{ width:6px }
+.year-right::-webkit-scrollbar-track{ background:var(--bg3) }
+.year-right::-webkit-scrollbar-thumb{ background:var(--border2);border-radius:3px }
+.year-right::-webkit-scrollbar-thumb:hover{ background:var(--accent) }
+.year-left::-webkit-scrollbar{ width:4px }
+.year-left::-webkit-scrollbar-track{ background:var(--bg3) }
+.year-left::-webkit-scrollbar-thumb{ background:var(--border2);border-radius:3px }
 
 .yr-left-title{ font-size:.72rem;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px }
 .yr-left-subtitle{ font-size:.65rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;margin-top:4px }
