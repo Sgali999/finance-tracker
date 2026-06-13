@@ -648,12 +648,16 @@ function renderSection(s){
 // ── DASHBOARD ──
 function renderDashboard(){
   const wallet=calcWalletBalance();
+  const returns=totalReturns();
   document.getElementById('kpi-invested').textContent=fmt(totalInvested());
   document.getElementById('kpi-income').textContent=fmt(thisYearIncome());
   const builtInInterest = totalInterestEarned();
   const customInterest  = typeof customSectionsTotalInterest==='function' ? customSectionsTotalInterest() : 0;
   document.getElementById('kpi-interest').textContent=fmt(builtInInterest + customInterest);
   document.getElementById('kpi-expense').textContent=fmt(thisYearExpenses());
+  document.getElementById('kpi-returns').textContent=fmt(returns.total);
+  document.getElementById('kpi-returns-sub').textContent=
+    returns.total > 0 ? `P: ${fmt(returns.principal)}  +  I: ${fmt(returns.interest)}` : 'No closed investments yet';
   document.getElementById('kpi-wallet-dash').textContent=fmt(wallet.balance);
   document.getElementById('kpi-loan-dash').textContent=fmt(totalLoanOutstanding());
 
