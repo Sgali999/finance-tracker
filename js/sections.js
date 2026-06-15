@@ -26,9 +26,24 @@ function loadCustomSheetsFromWb(wb){
   ensureCustomDb();
   loadCustomDefs().forEach(def => {
     const sn = def.sheetName || def.name;
-    db.custom[def.id] = wb.SheetNames.includes(sn)
-      ? XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''}).map(r=>({id:r.id||uid(),...r}))
-      : (db.custom[def.id] || []);
+    if(wb.SheetNames.includes(sn)){
+      db.custom[def.id] = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:'', raw:false})
+        .map(r => {
+          // Normalize date fields
+          const fixed = { id: r.id || uid() };
+          Object.keys(r).forEach(k => {
+            const v = r[k];
+            // Check if this column is a date type
+            const col = def.columns.find(c => c.key === k);
+            if(col && col.type === 'date') fixed[k] = safeDate(v);
+            else if(col && col.type === 'number') fixed[k] = safeNum(v);
+            else fixed[k] = v === null || v === undefined ? '' : String(v);
+          });
+          return fixed;
+        });
+    } else {
+      db.custom[def.id] = db.custom[def.id] || [];
+    }
   });
 }
 function writeCustomSheetsToWb(wb){
