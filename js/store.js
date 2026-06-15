@@ -16,80 +16,119 @@ function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(
 // ── INTEREST CALCULATION ── Simple interest P*R*T/100
 function calcInterest(amount, ratePerYear, startDate){
   if(!amount || !ratePerYear || !startDate) return 0;
-  const start = new Date(startDate);
+  // Normalize date — could be serial number if Excel read without raw:false
+  const dateStr = typeof startDate === 'number' ? safeDate(startDate) : String(startDate).slice(0,10);
+  if(!dateStr || !dateStr.match(/^\d{4}-\d{2}-\d{2}/)) return 0;
+  const start = new Date(dateStr);
   const now   = new Date();
-  if(isNaN(start) || start > now) return 0;
+  if(isNaN(start.getTime()) || start > now) return 0;
   const years = (now - start) / (1000*60*60*24*365.25);
   return Math.round(amount * ratePerYear * years / 100);
 }
 
 // ── WORKBOOK → DB ──
+// Helper: ensure date is always a YYYY-MM-DD string
+function safeDate(v){
+  if(!v) return '';
+  if(typeof v === 'number'){
+    // Excel serial date → JS date
+    try{
+      const d = XLSX.SSF.parse_date_code(v);
+      if(d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+    }catch(e){}
+    return '';
+  }
+  const s = String(v).trim();
+  // Already YYYY-MM-DD
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  // DD/MM/YYYY or MM/DD/YYYY
+  if(/^\d{1,2}\/\d{1,2}\/\d{4}/.test(s)){
+    const p = s.split('/');
+    return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+  }
+  // Try parsing as date string
+  try{
+    const d = new Date(s);
+    if(!isNaN(d)) return d.toISOString().slice(0,10);
+  }catch(e){}
+  return s;
+}
+// Helper: ensure number
+function safeNum(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
+// Helper: ensure string
+function safeStr(v){ return v===null||v===undefined?'':String(v).trim(); }
+
 function wbToDb(wb){
-  function rows(sheet){ return wb.SheetNames.includes(sheet) ? XLSX.utils.sheet_to_json(wb.Sheets[sheet],{defval:''}) : []; }
+  // raw:false → SheetJS formats all values as strings (dates as YYYY-MM-DD, numbers as strings)
+  // We then parse numbers explicitly with safeNum to avoid serial date confusion
+  function rows(sheet){
+    if(!wb.SheetNames.includes(sheet)) return [];
+    return XLSX.utils.sheet_to_json(wb.Sheets[sheet], {defval:'', raw:false});
+  }
   db.ppf = rows(SHEETS.PPF).map(r=>({
-    id:r.id||uid(), date:r.date||'', bank:r.bank||'', amount:+r.amount||0,
-    status:r.status||'Active', source:r.source||'', details:r.details||'',
-    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
-    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), bank:safeStr(r.bank), amount:safeNum(r.amount),
+    status:safeStr(r.status)||'Active', source:safeStr(r.source), details:safeStr(r.details),
+    returnDate:safeDate(r.returnDate), returnAmount:safeNum(r.returnAmount), returnInterest:safeNum(r.returnInterest),
+    reinvestedInto:safeStr(r.reinvestedInto), reinvestNote:safeStr(r.reinvestNote)
   }));
   db.fd = rows(SHEETS.FD).map(r=>({
-    id:r.id||uid(), date:r.date||'', fdNumber:r.fdNumber||'', bank:r.bank||'',
-    amount:+r.amount||0, rate:+r.rate||0, status:r.status||'Active',
-    brokenDate:r.brokenDate||'', brokenAmount:+r.brokenAmount||0,
-    returnDate:r.returnDate||r.brokenDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
-    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||'',
-    source:r.source||'', details:r.details||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), fdNumber:safeStr(r.fdNumber), bank:safeStr(r.bank),
+    amount:safeNum(r.amount), rate:safeNum(r.rate), status:safeStr(r.status)||'Active',
+    brokenDate:safeDate(r.brokenDate), brokenAmount:safeNum(r.brokenAmount),
+    returnDate:safeDate(r.returnDate)||safeDate(r.brokenDate), returnAmount:safeNum(r.returnAmount), returnInterest:safeNum(r.returnInterest),
+    reinvestedInto:safeStr(r.reinvestedInto), reinvestNote:safeStr(r.reinvestNote),
+    source:safeStr(r.source), details:safeStr(r.details)
   }));
   db.business = rows(SHEETS.BUSINESS).map(r=>({
-    id:r.id||uid(), date:r.date||'', name:r.name||'', amount:+r.amount||0,
-    rate:+r.rate||0, status:r.status||'Active', source:r.source||'', details:r.details||'',
-    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
-    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), name:safeStr(r.name), amount:safeNum(r.amount),
+    rate:safeNum(r.rate), status:safeStr(r.status)||'Active', source:safeStr(r.source), details:safeStr(r.details),
+    returnDate:safeDate(r.returnDate), returnAmount:safeNum(r.returnAmount), returnInterest:safeNum(r.returnInterest),
+    reinvestedInto:safeStr(r.reinvestedInto), reinvestNote:safeStr(r.reinvestNote)
   }));
   db.outside = rows(SHEETS.OUTSIDE).map(r=>({
-    id:r.id||uid(), date:r.date||'', person:r.person||'', amount:+r.amount||0,
-    rate:+r.rate||0, status:r.status||'Active', source:r.source||'', details:r.details||'',
-    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
-    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), person:safeStr(r.person), amount:safeNum(r.amount),
+    rate:safeNum(r.rate), status:safeStr(r.status)||'Active', source:safeStr(r.source), details:safeStr(r.details),
+    returnDate:safeDate(r.returnDate), returnAmount:safeNum(r.returnAmount), returnInterest:safeNum(r.returnInterest),
+    reinvestedInto:safeStr(r.reinvestedInto), reinvestNote:safeStr(r.reinvestNote)
   }));
   db.stocks = rows(SHEETS.STOCKS).map(r=>({
-    id:r.id||uid(), date:r.date||'', name:r.name||'', amount:+r.amount||0,
-    status:r.status||'Active', details:r.details||'',
-    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
-    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), name:safeStr(r.name), amount:safeNum(r.amount),
+    status:safeStr(r.status)||'Active', details:safeStr(r.details),
+    returnDate:safeDate(r.returnDate), returnAmount:safeNum(r.returnAmount), returnInterest:safeNum(r.returnInterest),
+    reinvestedInto:safeStr(r.reinvestedInto), reinvestNote:safeStr(r.reinvestNote)
   }));
   db.mf = rows(SHEETS.MF).map(r=>({
-    id:r.id||uid(), date:r.date||'', name:r.name||'', amount:+r.amount||0,
-    status:r.status||'Active', details:r.details||'',
-    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
-    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), name:safeStr(r.name), amount:safeNum(r.amount),
+    status:safeStr(r.status)||'Active', details:safeStr(r.details),
+    returnDate:safeDate(r.returnDate), returnAmount:safeNum(r.returnAmount), returnInterest:safeNum(r.returnInterest),
+    reinvestedInto:safeStr(r.reinvestedInto), reinvestNote:safeStr(r.reinvestNote)
   }));
   db.lic = rows(SHEETS.LIC).map(r=>({
-    id:r.id||uid(), date:r.date||'', name:r.name||'', amount:+r.amount||0,
-    status:r.status||'Active', details:r.details||'',
-    returnDate:r.returnDate||'', returnAmount:+r.returnAmount||0, returnInterest:+r.returnInterest||0,
-    reinvestedInto:r.reinvestedInto||'', reinvestNote:r.reinvestNote||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), name:safeStr(r.name), amount:safeNum(r.amount),
+    status:safeStr(r.status)||'Active', details:safeStr(r.details),
+    returnDate:safeDate(r.returnDate), returnAmount:safeNum(r.returnAmount), returnInterest:safeNum(r.returnInterest),
+    reinvestedInto:safeStr(r.reinvestedInto), reinvestNote:safeStr(r.reinvestNote)
   }));
   db.expenses = rows(SHEETS.EXPENSES).map(r=>({
-    id:r.id||uid(), date:r.date||'', name:r.name||'', category:r.category||'',
-    amount:+r.amount||0, notes:r.notes||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), name:safeStr(r.name), category:safeStr(r.category),
+    amount:safeNum(r.amount), notes:safeStr(r.notes)
   }));
   db.salary = rows(SHEETS.SALARY).map(r=>({
-    id:r.id||uid(), date:r.date||'', month:r.month||'', type:r.type||'Salary',
-    amount:+r.amount||0, source:r.source||'', notes:r.notes||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), month:safeStr(r.month), type:safeStr(r.type)||'Salary',
+    amount:safeNum(r.amount), source:safeStr(r.source), notes:safeStr(r.notes)
   }));
   db.loans = rows(SHEETS.LOANS).map(r=>({
-    id:r.id||uid(), date:r.date||'', name:r.name||'', lender:r.lender||'',
-    principal:+r.principal||0, rate:+r.rate||0, emiAmount:+r.emiAmount||0,
-    tenure:+r.tenure||0, status:r.status||'Active', notes:r.notes||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), name:safeStr(r.name), lender:safeStr(r.lender),
+    principal:safeNum(r.principal), rate:safeNum(r.rate), emiAmount:safeNum(r.emiAmount),
+    tenure:safeNum(r.tenure), status:safeStr(r.status)||'Active', notes:safeStr(r.notes)
   }));
   db.loanPayments = rows(SHEETS.LOAN_PMTS).map(r=>({
-    id:r.id||uid(), loanId:r.loanId||'', date:r.date||'', month:r.month||'',
-    amount:+r.amount||0, notes:r.notes||''
+    id:safeStr(r.id)||uid(), loanId:safeStr(r.loanId), date:safeDate(r.date), month:safeStr(r.month),
+    amount:safeNum(r.amount), notes:safeStr(r.notes)
   }));
   db.cashflow = rows(SHEETS.CASHFLOW).map(r=>({
-    id:r.id||uid(), date:r.date||'', month:r.month||'', type:r.type||'',
-    flow:r.flow||'in', amount:+r.amount||0, description:r.description||'', linkedId:r.linkedId||''
+    id:safeStr(r.id)||uid(), date:safeDate(r.date), month:safeStr(r.month), type:safeStr(r.type),
+    flow:safeStr(r.flow)||'in', amount:safeNum(r.amount), description:safeStr(r.description), linkedId:safeStr(r.linkedId)
   }));
   _dirty = false;
 }
