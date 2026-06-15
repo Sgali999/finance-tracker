@@ -330,7 +330,30 @@ function yearExpenses(y){ return db.expenses.filter(r=>r.date.startsWith(y)).red
 function thisYearIncome(){ return allTimeIncome(); }
 function thisYearExpenses(){ return allTimeExpenses(); }
 
-// ── FORMAT helpers ──
-function fmt(n){ return '₹'+(Math.round(n)||0).toLocaleString('en-IN'); }
-function fmtD(d){ if(!d)return '—'; try{ return new Date(d).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return d; } }
-function fmtRate(r){ return r?(r+'% /yr'):'—'; }
+// ── FORMAT helpers — no locale dependency (works on all mobile browsers) ──
+function fmt(n){
+  const num = Math.round(parseFloat(n)) || 0;
+  if(isNaN(num)) return '₹0';
+  const abs = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  const s = String(abs);
+  // Indian number system: last 3 digits, then groups of 2
+  if(s.length <= 3) return sign + '₹' + s;
+  const last3 = s.slice(-3);
+  const rest = s.slice(0, -3);
+  const grouped = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  return sign + '₹' + grouped + ',' + last3;
+}
+
+function fmtD(d){
+  if(!d) return '—';
+  try{
+    const s = typeof d === 'number' ? safeDate(d) : String(d).slice(0,10);
+    if(!s || !s.match(/^\d{4}-\d{2}-\d{2}/)) return d ? String(d) : '—';
+    const [y, m, day] = s.split('-');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${parseInt(day)} ${months[parseInt(m)-1]} ${y}`;
+  }catch(e){ return String(d); }
+}
+
+function fmtRate(r){ return r ? (r + '% /yr') : '—'; }
