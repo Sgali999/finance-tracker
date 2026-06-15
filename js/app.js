@@ -140,4 +140,21 @@ document.addEventListener('DOMContentLoaded',()=>{
   const cfg=ghLoadConfig();
   if(cfg){ ghLoad(); }
   else { document.getElementById('modal-config').style.display='flex'; }
+
+  // Auto-reload data when user switches back to this tab/app
+  // This keeps mobile in sync when laptop has made changes
+  let _lastFocus = Date.now();
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible'){
+      const elapsed = Date.now() - _lastFocus;
+      // If away for more than 2 minutes, reload fresh data from GitHub
+      if(elapsed > 2 * 60 * 1000 && ghLoadConfig()){
+        setSyncLbl('Refreshing data…');
+        ghLoad();
+      }
+      _lastFocus = Date.now();
+    } else {
+      _lastFocus = Date.now();
+    }
+  });
 });
