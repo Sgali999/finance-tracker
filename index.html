@@ -4,7 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>NestFinance – Personal Finance Tracker</title>
-  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/style.css?v=1781503750"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 </head>
@@ -189,7 +189,7 @@
       <div id="year-content"></div>
     </div>
     <div class="page active" id="page-dashboard">
-      <div class="kpi-row kpi-row-3">
+      <div class="kpi-row kpi-row-3" onclick="debugTap()" style="cursor:default">
         <div class="kpi green"><div class="kpi-l">Total Invested (Active)</div><div class="kpi-v" id="kpi-invested">₹0</div></div>
         <div class="kpi blue"><div class="kpi-l">Total Income (All Time)</div><div class="kpi-v" id="kpi-income">₹0</div></div>
         <div class="kpi gold"><div class="kpi-l">Interest Earned (Live)</div><div class="kpi-v" id="kpi-interest">₹0</div></div>
@@ -488,6 +488,7 @@
 
 <div id="toast" class="toast"></div>
 <div id="sync-lbl" class="sync-lbl" style="display:none"></div>
+<div id="debug-panel" style="display:none;position:fixed;top:60px;right:8px;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:10px;border-radius:6px;z-index:9999;max-width:300px;max-height:50vh;overflow-y:auto;opacity:.9"></div>
 
 <!-- ══ SECTION BUILDER MODAL ══ -->
 <div id="modal-section-builder" class="overlay" style="display:none">
@@ -553,12 +554,12 @@
   </div>
 </div>
 
-<script src="js/store.js"></script>
-<script src="js/github.js"></script>
-<script src="js/forms.js"></script>
-<script src="js/sections.js"></script>
-<script src="js/render.js"></script>
-<script src="js/charts.js"></script>
-<script src="js/app.js"></script>
+<script src="js/store.js?v=1781503750"></script>
+<script src="js/github.js?v=1781503750"></script>
+<script src="js/forms.js?v=1781503750"></script>
+<script src="js/sections.js?v=1781503750"></script>
+<script src="js/render.js?v=1781503750"></script>
+<script src="js/charts.js?v=1781503750"></script>
+<script src="js/app.js?v=1781503750"></script>
 </body>
 </html>
