@@ -358,55 +358,60 @@ function fmtD(d){
 
 function fmtRate(r){ return r ? (r + '% /yr') : '—'; }
 
-// ── DEBUG (tap dashboard title 5x to show) ──
+// ── DEBUG (tap dashboard KPI area 5x to show) ──
 let _dbgTaps = 0;
 function debugTap(){
   _dbgTaps++;
-  if(_dbgTaps >= 5){
-    _dbgTaps = 0;
-    showDebug();
-  }
+  if(_dbgTaps >= 5){ _dbgTaps=0; showDebug(); }
 }
 function showDebug(){
-  const invested = totalInvested();
-  const interest = totalInterestEarned();
-  const wallet   = calcWalletBalance();
-  const ua       = navigator.userAgent;
+  const keys = ['ppf','fd','business','outside','stocks','mf','lic'];
+  const lines = ['NestFinance Debug v2','─────────────────'];
 
-  // Sample first FD
-  const fd0 = db.fd[0];
-  const fdInterest = fd0 ? calcInterest(fd0.amount, fd0.rate, fd0.date) : 'no FD';
+  // Per-section breakdown
+  let totalActive=0, totalInterest=0;
+  keys.forEach(k=>{
+    const all   = db[k].length;
+    const active= db[k].filter(r=>r.status==='Active');
+    const amt   = active.reduce((s,r)=>s+r.amount,0);
+    const int   = active.reduce((s,r)=>s+calcInterest(r.amount,r.rate,r.date),0);
+    totalActive += amt;
+    totalInterest += int;
+    lines.push(`${k}: ${active.length}/${all} active, amt=${amt}, int=${int}`);
+  });
+  lines.push('─────────────────');
 
-  const lines = [
-    'NestFinance Debug',
-    '─────────────────',
-    `UA: ${ua.slice(0,60)}`,
-    `─────────────────`,
-    `Raw totalInvested: ${invested}`,
-    `fmt(invested): ${fmt(invested)}`,
-    `Raw interest: ${interest}`,
-    `fmt(interest): ${fmt(interest)}`,
-    `Wallet balance: ${wallet.balance}`,
-    `─────────────────`,
-    `FD count: ${db.fd.length}`,
-    `FD[0] date: ${fd0?.date} (type:${typeof fd0?.date})`,
-    `FD[0] amount: ${fd0?.amount} (type:${typeof fd0?.amount})`,
-    `FD[0] rate: ${fd0?.rate}`,
-    `FD[0] status: ${fd0?.status}`,
-    `FD[0] interest: ${fdInterest}`,
-    `─────────────────`,
-    `PPF active: ${db.ppf.filter(r=>r.status==='Active').length}`,
-    `FD active: ${db.fd.filter(r=>r.status==='Active').length}`,
-    `Business active: ${db.business.filter(r=>r.status==='Active').length}`,
-    `Outside active: ${db.outside.filter(r=>r.status==='Active').length}`,
-    `─────────────────`,
-    `locale test: ${(1602349).toLocaleString('en-IN')}`,
-    `fmt test: ${fmt(1602349)}`,
-  ];
+  // Custom sections
+  if(typeof loadCustomDefs==='function'){
+    const defs = loadCustomDefs();
+    lines.push(`Custom defs: ${defs.length}`);
+    defs.forEach(def=>{
+      const rows=db.custom?.[def.id]||[];
+      const amtCol=def.columns.find(c=>c.type==='number');
+      const total=amtCol?rows.reduce((s,r)=>s+(parseFloat(r[amtCol.key])||0),0):0;
+      lines.push(`  ${def.name}(${def.sectionType}): ${rows.length} rows, amt=${total}`);
+    });
+  }
+  lines.push('─────────────────');
+  lines.push(`Base invested: ${totalActive}`);
+  lines.push(`Custom invested: ${typeof customSectionsTotalInvested==='function'?customSectionsTotalInvested():0}`);
+  lines.push(`totalInvested(): ${totalInvested()}`);
+  lines.push(`totalInterest(): ${totalInterestEarned()}`);
+  lines.push('─────────────────');
+
+  // Sample first entry of each section raw
+  const fd0=db.fd[0];
+  if(fd0) lines.push(`FD[0] raw: date=${fd0.date} amt=${fd0.amount} rate=${fd0.rate} status=${fd0.status}`);
+  const biz0=db.business[0];
+  if(biz0) lines.push(`Biz[0] raw: date=${biz0.date} amt=${biz0.amount} rate=${biz0.rate} status=${biz0.status}`);
+
+  lines.push('─────────────────');
+  lines.push(`fmt(1000000): ${fmt(1000000)}`);
+  lines.push(`calcInterest(100000,18,'2025-01-01'): ${calcInterest(100000,18,'2025-01-01')}`);
 
   const el = document.getElementById('debug-panel');
   if(el){
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    el.style.display = el.style.display==='none' ? 'block' : 'none';
     el.innerHTML = lines.join('<br>');
   }
   console.log(lines.join('\n'));
