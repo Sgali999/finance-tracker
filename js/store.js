@@ -357,3 +357,57 @@ function fmtD(d){
 }
 
 function fmtRate(r){ return r ? (r + '% /yr') : '—'; }
+
+// ── DEBUG (tap dashboard title 5x to show) ──
+let _dbgTaps = 0;
+function debugTap(){
+  _dbgTaps++;
+  if(_dbgTaps >= 5){
+    _dbgTaps = 0;
+    showDebug();
+  }
+}
+function showDebug(){
+  const invested = totalInvested();
+  const interest = totalInterestEarned();
+  const wallet   = calcWalletBalance();
+  const ua       = navigator.userAgent;
+
+  // Sample first FD
+  const fd0 = db.fd[0];
+  const fdInterest = fd0 ? calcInterest(fd0.amount, fd0.rate, fd0.date) : 'no FD';
+
+  const lines = [
+    'NestFinance Debug',
+    '─────────────────',
+    `UA: ${ua.slice(0,60)}`,
+    `─────────────────`,
+    `Raw totalInvested: ${invested}`,
+    `fmt(invested): ${fmt(invested)}`,
+    `Raw interest: ${interest}`,
+    `fmt(interest): ${fmt(interest)}`,
+    `Wallet balance: ${wallet.balance}`,
+    `─────────────────`,
+    `FD count: ${db.fd.length}`,
+    `FD[0] date: ${fd0?.date} (type:${typeof fd0?.date})`,
+    `FD[0] amount: ${fd0?.amount} (type:${typeof fd0?.amount})`,
+    `FD[0] rate: ${fd0?.rate}`,
+    `FD[0] status: ${fd0?.status}`,
+    `FD[0] interest: ${fdInterest}`,
+    `─────────────────`,
+    `PPF active: ${db.ppf.filter(r=>r.status==='Active').length}`,
+    `FD active: ${db.fd.filter(r=>r.status==='Active').length}`,
+    `Business active: ${db.business.filter(r=>r.status==='Active').length}`,
+    `Outside active: ${db.outside.filter(r=>r.status==='Active').length}`,
+    `─────────────────`,
+    `locale test: ${(1602349).toLocaleString('en-IN')}`,
+    `fmt test: ${fmt(1602349)}`,
+  ];
+
+  const el = document.getElementById('debug-panel');
+  if(el){
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    el.innerHTML = lines.join('<br>');
+  }
+  console.log(lines.join('\n'));
+}
