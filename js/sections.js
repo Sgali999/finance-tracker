@@ -1,6 +1,7 @@
 // ── CUSTOM SECTIONS ENGINE ──
-// sectionType: 'investment' (adds to portfolio) | 'deduction' (subtracts from wallet)
-// Stored in localStorage under 'nf_custom_sections'
+// sectionType: 'investment' | 'deduction'
+// Definitions stored in Excel sheet '_CustomDefs' so they sync across all devices
+// Also mirrored to localStorage as a fast cache
 
 const COLUMN_TYPES = [
   { value:'text',   label:'Text' },
@@ -11,11 +12,19 @@ const COLUMN_TYPES = [
   { value:'select', label:'Dropdown (custom options)' },
 ];
 
-function loadCustomDefs(){
-  try { return JSON.parse(localStorage.getItem('nf_custom_sections') || '[]'); }
-  catch(e){ return []; }
+const CUSTOM_DEFS_SHEET = '_CustomDefs';
+
+// In-memory store for defs (loaded from Excel on boot)
+let _customDefs = [];
+
+function loadCustomDefs(){ return _customDefs; }
+
+function saveCustomDefs(defs){
+  _customDefs = defs;
+  // Also cache in localStorage for fast access
+  try { localStorage.setItem('nf_custom_sections', JSON.stringify(defs)); } catch(e){}
+  _dirty = true; // Mark workbook dirty so it gets synced
 }
-function saveCustomDefs(defs){ localStorage.setItem('nf_custom_sections', JSON.stringify(defs)); }
 
 function ensureCustomDb(){
   if(!db.custom) db.custom = {};
@@ -24,16 +33,43 @@ function ensureCustomDb(){
 // ── Excel I/O ──
 function loadCustomSheetsFromWb(wb){
   ensureCustomDb();
-  loadCustomDefs().forEach(def => {
+
+  // 1. Load definitions from Excel sheet '_CustomDefs'
+  if(wb.SheetNames.includes(CUSTOM_DEFS_SHEET)){
+    try{
+      const defsRows = XLSX.utils.sheet_to_json(wb.Sheets[CUSTOM_DEFS_SHEET], {defval:''});
+      if(defsRows.length > 0 && defsRows[0].defsJson){
+        const parsed = JSON.parse(defsRows[0].defsJson);
+        if(Array.isArray(parsed) && parsed.length > 0){
+          _customDefs = parsed;
+          // Sync to localStorage cache
+          try { localStorage.setItem('nf_custom_sections', JSON.stringify(_customDefs)); } catch(e){}
+        }
+      }
+    } catch(e){ console.warn('Failed to load custom defs from Excel:', e); }
+  }
+
+  // Fallback: if Excel has no defs, try localStorage (migration path)
+  if(_customDefs.length === 0){
+    try {
+      const cached = JSON.parse(localStorage.getItem('nf_custom_sections') || '[]');
+      if(Array.isArray(cached) && cached.length > 0){
+        _customDefs = cached;
+        // Will be written to Excel on next sync
+        _dirty = true;
+      }
+    } catch(e){}
+  }
+
+  // 2. Load data rows for each custom section
+  _customDefs.forEach(def => {
     const sn = def.sheetName || def.name;
     if(wb.SheetNames.includes(sn)){
       db.custom[def.id] = XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:'', raw:false})
         .map(r => {
-          // Normalize date fields
           const fixed = { id: r.id || uid() };
           Object.keys(r).forEach(k => {
             const v = r[k];
-            // Check if this column is a date type
             const col = def.columns.find(c => c.key === k);
             if(col && col.type === 'date') fixed[k] = safeDate(v);
             else if(col && col.type === 'number') fixed[k] = safeNum(v);
@@ -46,9 +82,19 @@ function loadCustomSheetsFromWb(wb){
     }
   });
 }
+
 function writeCustomSheetsToWb(wb){
   ensureCustomDb();
-  loadCustomDefs().forEach(def => {
+
+  // 1. Write definitions to '_CustomDefs' sheet
+  const defsJson = JSON.stringify(_customDefs);
+  const defsSheet = XLSX.utils.json_to_sheet([{ defsJson }]);
+  const defsIdx = wb.SheetNames.indexOf(CUSTOM_DEFS_SHEET);
+  if(defsIdx > -1){ wb.SheetNames.splice(defsIdx,1); delete wb.Sheets[CUSTOM_DEFS_SHEET]; }
+  XLSX.utils.book_append_sheet(wb, defsSheet, CUSTOM_DEFS_SHEET);
+
+  // 2. Write data rows for each custom section
+  _customDefs.forEach(def => {
     const sn = def.sheetName || def.name;
     const idx = wb.SheetNames.indexOf(sn);
     if(idx > -1){ wb.SheetNames.splice(idx,1); delete wb.Sheets[sn]; }
@@ -423,6 +469,11 @@ function confirmDeleteSection(defId){
 function bootCustomSections(wb){
   loadCustomSheetsFromWb(wb);
   loadCustomDefs().forEach(def=>buildCustomSectionDOM(def));
+  // If defs were migrated from localStorage to memory (not yet in Excel),
+  // trigger a sync so they get written to the Excel file for other devices
+  if(_dirty && typeof ghSync === 'function'){
+    setTimeout(()=>{ ghSync(); }, 2000);
+  }
 }
 
 // ── AGGREGATES for wallet/dashboard ──
