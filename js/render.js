@@ -627,7 +627,7 @@ function _yTable(headers, rows, styles=[], opts={}){
     }).join('');
     return `<tr>${cells}</tr>`;
   }).join('');
-  return `<div style="overflow-x:auto"><table class="tbl"><thead><tr>${thead}</tr></thead><tbody>${tbody||'<tr class="empty-row"><td colspan="'+headers.length+'">—</td></tr>'}</tbody></table></div>`;
+  return `<div class="tbl-wrap"><table class="tbl"><thead><tr>${thead}</tr></thead><tbody>${tbody||'<tr class="empty-row"><td colspan="'+headers.length+'">—</td></tr>'}</tbody></table></div>`;
 }
 
 function _yCard(title, body){
