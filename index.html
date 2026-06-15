@@ -170,6 +170,7 @@
     </nav>
     <div class="sidebar-foot">
       <button class="btn-sync" onclick="ghSync()" id="sync-btn">↑ Sync to GitHub</button>
+      <button class="btn-settings" onclick="ghLoad()" style="color:var(--blue);border-color:var(--blue)">↓ Reload Data</button>
       <button class="btn-settings" onclick="showConfig()">⚙ Settings</button>
     </div>
   </aside>
@@ -483,6 +484,7 @@
     <button class="bnav-item" data-bpage="wallet" onclick="nav('wallet');closeSidebarMobile()"><span class="bi">👛</span><span>Wallet</span></button>
     <button class="bnav-item" data-bpage="ledger" onclick="nav('ledger');closeSidebarMobile()"><span class="bi">📒</span><span>Ledger</span></button>
     <button class="bnav-item" onclick="ghSync()"><span class="bi">☁️</span><span>Sync</span></button>
+    <button class="bnav-item" onclick="ghLoad();closeSidebarMobile()"><span class="bi">🔄</span><span>Reload</span></button>
   </div>
 </div>
 
